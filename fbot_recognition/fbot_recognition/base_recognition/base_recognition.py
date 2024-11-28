@@ -32,7 +32,7 @@ class BaseRecognition(Node):
         for source in SOURCES_TYPES:
             if source in self.subscribers_dict:
                 subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.subscribers_dict[source], qos_profile=self.qos_profile))
-        self._synchronizer = message_filters.ApproximateTimeSynchronizer([x for x in subscribers],queue_size=10, slop=self.slop)
+        self._synchronizer = message_filters.ApproximateTimeSynchronizer([x for x in subscribers],queue_size=1, slop=self.slop)
         self._synchronizer.registerCallback(callback_obj)
 
     def loadCVBrige(self):

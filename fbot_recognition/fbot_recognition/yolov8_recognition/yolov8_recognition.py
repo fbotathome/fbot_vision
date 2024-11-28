@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 import rclpy
 from PIL import Image as IMG
-from image2world import image2worldlib as i2w
-from image2world import BoundingBoxProcessingData
-import image2world
+from image2world.image2worldlib import *
 from fbot_recognition import BaseRecognition
 import numpy as np
 import torch
@@ -22,6 +20,8 @@ from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from ament_index_python.packages import get_package_share_directory
 
 
+
+
 #TODO: Allocate and deallocate model in the right way
 #TODO Implement people detection
 #TODO: Filter the area inside the house by using i2w.inPolygonFilter()
@@ -31,6 +31,7 @@ class YoloV8Recognition(BaseRecognition):
     def __init__(self):
         super().__init__(node_name='yolov8_recognition')
 
+        self.declareParameters()
         self.readParameters()
         self.loadModel()
         self.initRosComm()
@@ -105,7 +106,7 @@ class YoloV8Recognition(BaseRecognition):
                 bb2d = data.boundingBox2D
         
                 try:
-                    bb3d = i2w.Image2World.boundingBoxProcessing(i2w.Image2World(), data=data)
+                    bb3d = boundingBoxProcessing(data)
                 except Exception as e:
                     self.get_logger().error(f"Error processing bounding box: {e}")
                     return None
@@ -214,25 +215,29 @@ class YoloV8Recognition(BaseRecognition):
         
         self.marker_publisher.publish(markers)
 
-    def readParameters(self):
-        self.debug_image_topic = self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug").value
-        self.debug_qp = self.declare_parameter("publishers.debug.qos_profile", 1).value
-
-        self.object_recognition_topic = self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition").value
-        self.object_recognition_qp = self.declare_parameter("publishers.object_recognition.qos_profile", 1).value
-
-        self.people_detection_topic = self.declare_parameter("publishers.people_detection.topic", "/fbot_vision/fr/people_detection").value
-        self.people_detection_qp = self.declare_parameter("publishers.people_detection.qos_profile", 1).value
-
-        self.threshold = self.declare_parameter("threshold", 0.5).value
-
+    def declareParameters(self):
+        self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug")
+        self.declare_parameter("publishers.debug.qos_profile", 1)
+        self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
+        self.declare_parameter("publishers.object_recognition.qos_profile", 1)
+        self.declare_parameter("publishers.people_detection.topic", "/fbot_vision/fr/people_detection")
+        self.declare_parameter("publishers.people_detection.qos_profile", 1)
+        self.declare_parameter("threshold", 0.5)
         self.declare_parameter("classes_by_category", "")
+        self.declare_parameter("model_file", "yolov8n.pt")
+        self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
+
+    def readParameters(self):
+        self.debug_image_topic = self.get_parameter("publishers.debug.topic").value
+        self.debug_qp = self.get_parameter("publishers.debug.qos_profile").value
+        self.object_recognition_topic = self.get_parameter("publishers.object_recognition.topic").value
+        self.object_recognition_qp = self.get_parameter("publishers.object_recognition.qos_profile").value
+        self.people_detection_topic = self.get_parameter("publishers.people_detection.topic").value
+        self.people_detection_qp = self.get_parameter("publishers.people_detection.qos_profile").value
+        self.threshold = self.get_parameter("threshold").value
         self.classes_by_category = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
-    
-        self.model_file = get_package_share_directory('fbot_recognition') + "/weigths/" + self.declare_parameter("model_file", "yolov8n.pt").value
-
-        self.max_sizes = self.declare_parameter("max_sizes", [0.05, 0.05, 0.05]).value
-
+        self.model_file = get_package_share_directory('fbot_recognition') + "/weigths/" + self.get_parameter("model_file").value
+        self.max_sizes = self.get_parameter("max_sizes").value
         super().readParameters()
 
 def main(args=None):
