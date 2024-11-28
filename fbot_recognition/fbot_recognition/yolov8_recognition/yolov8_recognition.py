@@ -29,7 +29,7 @@ from ament_index_python.packages import get_package_share_directory
 
 class YoloV8Recognition(BaseRecognition):
     def __init__(self):
-        super().__init__(node_name='yolov8_recognition')
+        super().__init__(nodeName='yolov8_recognition')
 
         self.declareParameters()
         self.readParameters()
@@ -37,15 +37,15 @@ class YoloV8Recognition(BaseRecognition):
         self.initRosComm()
 
     def initRosComm(self):
-        self.debug_publisher = self.create_publisher(Image, self.debug_image_topic, qos_profile=self.debug_qp)
-        self.marker_publisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debug_qp)
-        self.object_recognition_publisher = self.create_publisher(Detection3DArray, self.object_recognition_topic, qos_profile=self.object_recognition_qp)
-        self.people_detection_publisher = self.create_publisher(Detection3DArray, self.people_detection_topic, qos_profile=self.people_detection_qp)
-        super().initRosComm(callback_obj=self)
+        self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
+        self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
+        self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
+        self.peopleDetectionPublisher = self.create_publisher(Detection3DArray, self.peopleDetectionTopic, qos_profile=self.peopleDetectionQosProfile)
+        super().initRosComm(callbackObject=self)
 
     def loadModel(self): 
         self.get_logger().info("=> Loading model")
-        self.model = YOLO(self.model_file)
+        self.model = YOLO(self.modelFile)
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
@@ -54,25 +54,25 @@ class YoloV8Recognition(BaseRecognition):
         torch.cuda.empty_cache()
         self.model = None
 
-    def callback(self, depth_msg: Image, image_msg: Image, camera_info_msg: CameraInfo):
+    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
 
         self.get_logger().info("=> Entering callback ")
 
-        all_classes = [cls for sublist in self.classes_by_category.values() for cls in sublist]
-        all_classes_len = len(all_classes)
+        allClasses = [cls for sublist in self.classesByCategory.values() for cls in sublist]
+        allClassesLen = len(allClasses)
 
-        if image_msg is None or depth_msg is None or camera_info_msg is None:
+        if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
             self.get_logger().error("One or more input messages are invalid.")
             return
         
-        cv_img = self.cv_bridge.imgmsg_to_cv2(image_msg,desired_encoding='bgr8')
-        results = self.model(cv_img)
+        cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg,desired_encoding='bgr8')
+        results = self.model(cvImage)
 
-        detection_header = image_msg.header
+        detectionHeader = imageMsg.header
 
-        detection3darray = Detection3DArray()
-        detection3darray.header = detection_header
-        detection3darray.image_rgb = image_msg
+        detection3DArray = Detection3DArray()
+        detection3DArray.header = detectionHeader
+        detection3DArray.image_rgb = imageMsg
 
         if len(results[0].boxes):
             for box in results[0].boxes: 
@@ -81,27 +81,27 @@ class YoloV8Recognition(BaseRecognition):
                     return None
                 
                 bb2d = BoundingBox2D()
-                class_id = int(box.cls)
+                classId = int(box.cls)
 
-                if class_id >= all_classes_len:
-                    self.get_logger().error(f"Class id {class_id} not found in classes_by_category")
+                if classId >= allClassesLen:
+                    self.get_logger().error(f"Class id {classId} not found in classesByCategory")
                     return
                 
-                label = results[0].names[class_id]
+                label = results[0].names[classId]
                 score = float(box.conf)
 
                 data = BoundingBoxProcessingData()
-                data.sensor.setSensorData(camera_info_msg, depth_msg)
+                data.sensor.setSensorData(cameraInfoMsg, depthMsg)
 
-                center_x, center_y, size_x, size_y = map(float, box.xywh[0])
+                centerX, centerY, sizeX, sizeY = map(float, box.xywh[0])
 
-                data.boundingBox2D.center.position.x = center_x
-                data.boundingBox2D.center.position.y = center_y
-                data.boundingBox2D.size_x = size_x
-                data.boundingBox2D.size_y = size_y
-                data.maxSize.x = self.max_sizes[0]
-                data.maxSize.y = self.max_sizes[1]
-                data.maxSize.z = self.max_sizes[2]
+                data.boundingBox2D.center.position.x = centerX
+                data.boundingBox2D.center.position.y = centerY
+                data.boundingBox2D.size_x = sizeX
+                data.boundingBox2D.size_y = sizeY
+                data.maxSize.x = self.maxSizes[0]
+                data.maxSize.y = self.maxSizes[1]
+                data.maxSize.z = self.maxSizes[2]
 
                 bb2d = data.boundingBox2D
         
@@ -111,34 +111,34 @@ class YoloV8Recognition(BaseRecognition):
                     self.get_logger().error(f"Error processing bounding box: {e}")
                     return None
                 
-                detection3d = self.createDetection3d(bb2d, bb3d, score, detection_header, label)
+                detection3d = self.createDetection3d(bb2d, bb3d, score, detectionHeader, label)
                 if detection3d is not None:
-                    detection3darray.detections.append(detection3d)
+                    detection3DArray.detections.append(detection3d)
             
                 ######PARA FILTRAR OQ ESTA DENTRO DA CASA
                 #if i2w.inPolygonFilter(bbox3d):
         
-        self.object_recognition_publisher.publish(detection3darray)
+        self.objectRecognitionPublisher.publish(detection3DArray)
 
-        im_array = results[0].plot()
-        im = IMG.fromarray(im_array[..., ::-1])
-        debug_imgmsg = self.cv_bridge.cv2_to_imgmsg(np.array(im), encoding='rgb8')
-        self.debug_publisher.publish(debug_imgmsg)
+        imageArray = results[0].plot()
+        image = IMG.fromarray(imageArray[..., ::-1])
+        debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
+        self.debugPublisher.publish(debugImageMsg)
 
-        self.publishMarkers(detection3darray.detections)
+        self.publishMarkers(detection3DArray.detections)
 
-    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detection_header: Header, label: str):
+    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str):
         detection3d = Detection3D()
-        detection3d.header = detection_header
+        detection3d.header = detectionHeader
         detection3d.id = 0
         detection3d.label == ''
         detection3d.score = score
 
-        for category, items in self.classes_by_category.items():
+        for category, items in self.classesByCategory.items():
             if label in items:
                 detection3d.label = category + '/' + label
         if detection3d.label == '':
-            self.get_logger().error(f"Label {label} not found in classes_by_category")
+            self.get_logger().error(f"Label {label} not found in classesByCategory")
             return None
 
         detection3d.bbox2d = bb2d
@@ -213,7 +213,7 @@ class YoloV8Recognition(BaseRecognition):
                     marker.lifetime = duration
                     markers.markers.append(marker)
         
-        self.marker_publisher.publish(markers)
+        self.markerPublisher.publish(markers)
 
     def declareParameters(self):
         self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug")
@@ -228,16 +228,16 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
 
     def readParameters(self):
-        self.debug_image_topic = self.get_parameter("publishers.debug.topic").value
-        self.debug_qp = self.get_parameter("publishers.debug.qos_profile").value
-        self.object_recognition_topic = self.get_parameter("publishers.object_recognition.topic").value
-        self.object_recognition_qp = self.get_parameter("publishers.object_recognition.qos_profile").value
-        self.people_detection_topic = self.get_parameter("publishers.people_detection.topic").value
-        self.people_detection_qp = self.get_parameter("publishers.people_detection.qos_profile").value
+        self.debugImageTopic = self.get_parameter("publishers.debug.topic").value
+        self.debugQosProfile = self.get_parameter("publishers.debug.qos_profile").value
+        self.objectRecognitionTopic = self.get_parameter("publishers.object_recognition.topic").value
+        self.objectRecognitionQosProfile = self.get_parameter("publishers.object_recognition.qos_profile").value
+        self.peopleDetectionTopic = self.get_parameter("publishers.people_detection.topic").value
+        self.peopleDetectionQosProfile = self.get_parameter("publishers.people_detection.qos_profile").value
         self.threshold = self.get_parameter("threshold").value
-        self.classes_by_category = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
-        self.model_file = get_package_share_directory('fbot_recognition') + "/weigths/" + self.get_parameter("model_file").value
-        self.max_sizes = self.get_parameter("max_sizes").value
+        self.classesByCategory = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
+        self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
+        self.maxSizes = self.get_parameter("max_sizes").value
         super().readParameters()
 
 def main(args=None):

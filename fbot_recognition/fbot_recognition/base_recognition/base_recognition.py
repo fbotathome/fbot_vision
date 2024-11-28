@@ -15,28 +15,28 @@ SOURCES_TYPES = {
         'image_depth': Image
     }
 class BaseRecognition(Node):
-    def __init__(self, package_name='fbot_recognition', node_name='base_recognition'):
-        super().__init__(node_name)
-        self.pkg_path = get_package_share_directory(package_name)
-        self.subscribers_dict = {}
+    def __init__(self, packageName='fbot_recognition', nodeName='base_recognition'):
+        super().__init__(nodeName)
+        self.pkgPath = get_package_share_directory(packageName)
+        self.topicsToSubscribe = {}
 
         self.loadCVBrige()
     
-    def initRosComm(self, callback_obj=None):
-        if callback_obj is None:
-            callback_obj = self
-        self.syncSubscribers(callback_obj.callback)
+    def initRosComm(self, callbackObject=None):
+        if callbackObject is None:
+            callbackObject = self
+        self.syncSubscribers(callbackObject.callback)
 
-    def syncSubscribers(self, callback_obj):
+    def syncSubscribers(self, callbackObject):
         subscribers = []
         for source in SOURCES_TYPES:
-            if source in self.subscribers_dict:
-                subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.subscribers_dict[source], qos_profile=self.qos_profile))
+            if source in self.topicsToSubscribe:
+                subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.topicsToSubscribe[source], qos_profile=self.qosProfile))
         self._synchronizer = message_filters.ApproximateTimeSynchronizer([x for x in subscribers],queue_size=1, slop=self.slop)
-        self._synchronizer.registerCallback(callback_obj)
+        self._synchronizer.registerCallback(callbackObject)
 
     def loadCVBrige(self):
-        self.cv_bridge = CvBridge()
+        self.cvBridge = CvBridge()
 
     def loadModel(self):
         pass
@@ -50,7 +50,7 @@ class BaseRecognition(Node):
     def readParameters(self):
         for source in SOURCES_TYPES:
             self.declare_parameter(f'subscribers.{source}', "")
-            self.subscribers_dict[source] = self.get_parameter(f'subscribers.{source}').value 
-        self.slop = self.subscribers_dict.pop('slop', 0.1)
-        self.qos_profile = self.subscribers_dict.pop('qos_profile', 1)
+            self.topicsToSubscribe[source] = self.get_parameter(f'subscribers.{source}').value 
+        self.slop = self.topicsToSubscribe.pop('slop', 0.1)
+        self.qosProfile = self.topicsToSubscribe.pop('qos_profile', 1)
     

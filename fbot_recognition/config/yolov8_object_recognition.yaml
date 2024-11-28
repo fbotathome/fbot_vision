@@ -10,9 +10,9 @@ yolov8_recognition:
                           "Snacks": ["fillet", "Onion", "Pepperoni", "Wafer"]}'
       
     max_sizes:
-        - [10000.0, 10000.0, 10000.0]
+        - [0.5, 0.5, 0.5]
 
-    model_file: yolov8n.pt
+    model_file: larc_2024_best.pt
 
     subscribers:
       
