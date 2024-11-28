@@ -4,43 +4,39 @@ import rclpy
 from rclpy.node import Node
 
 from ament_index_python.packages import get_package_share_directory
+import message_filters
 
-from sensor_msgs.msg import Image
-from std_srvs.srv import Empty
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2
+from cv_bridge import CvBridge
 
-from fbot_vision_msgs.srv import ListClasses, ListClassesResponse
-
-from fbot_vision_bridge import VisionSynchronizer
-
+SOURCES_TYPES = {
+        'camera_info': CameraInfo,
+        'image_rgb': Image,
+        'image_depth': Image
+    }
 class BaseRecognition(Node):
-    def __init__(self, state=True, package_name='fbot_recognition'):
-        self.state = state
+    def __init__(self, package_name='fbot_recognition', node_name='base_recognition'):
+        super().__init__(node_name)
         self.pkg_path = get_package_share_directory(package_name)
-        self.seq = 0
+        self.subscribers_dict = {}
 
-    @staticmethod
-    def addSourceData2Recognitions2D(source_data, recognitions2d):
-        for key, value in source_data.items():
-            setattr(recognitions2d, key, value)
-        return recognitions2d
+        self.loadCVBrige()
     
-    def initRosComm(self, callbacks_obj=None):
-        if callbacks_obj is None:
-            callbacks_obj = self
-        VisionSynchronizer.syncSubscribers(self.subscribers_dict, callbacks_obj.callback, queue_size=self.queue_size, exact_time=self.exact_time, slop=self.slop)
-        self.list_classes_server = self.create_service(self.list_classes_service, ListClasses, callbacks_obj.serverListClasses)
+    def initRosComm(self, callback_obj=None):
+        if callback_obj is None:
+            callback_obj = self
+        self.syncSubscribers(callback_obj.callback)
 
-    def sourceDataFromArgs(self, args):
-        data = {}
-        index = 0
-        for source in VisionSynchronizer.POSSIBLE_SOURCES:
+    def syncSubscribers(self, callback_obj):
+        subscribers = []
+        for source in SOURCES_TYPES:
             if source in self.subscribers_dict:
-                data[source] = args[index]
-                index+= 1
-        return data
+                subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.subscribers_dict[source], qos_profile=self.qos_profile))
+        self._synchronizer = message_filters.ApproximateTimeSynchronizer([x for x in subscribers],queue_size=10, slop=self.slop)
+        self._synchronizer.registerCallback(callback_obj)
 
-    def serverListClasses(self, req):
-        return ListClassesResponse(self.classes)
+    def loadCVBrige(self):
+        self.cv_bridge = CvBridge()
 
     def loadModel(self):
         pass
@@ -52,11 +48,9 @@ class BaseRecognition(Node):
         pass
 
     def readParameters(self):
-        self.subscribers_dict = dict(self.get_parameter("~subscribers", {}))
-        self.queue_size = self.subscribers_dict.pop('queue_size', 1)
-        self.exact_time = self.subscribers_dict.pop('exact_time', False)
+        for source in SOURCES_TYPES:
+            self.declare_parameter(f'subscribers.{source}', "")
+            self.subscribers_dict[source] = self.get_parameter(f'subscribers.{source}').value 
         self.slop = self.subscribers_dict.pop('slop', 0.1)
-
-        self.list_classes_service = self.get_parameter("~servers/list_classes/service", "/fbot_vision/bgr/list_classes")
-
-        self.classes = list(self.get_parameter("~classes", [])) 
+        self.qos_profile = self.subscribers_dict.pop('qos_profile', 1)
+    

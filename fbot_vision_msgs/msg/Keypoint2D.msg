@@ -1,0 +1,22 @@
+uint8 NOSE=0
+uint8 L_EYE=1
+uint8 R_EYE=2
+uint8 L_EAR=3
+uint8 R_EAR=4
+uint8 L_SHOULDER=5
+uint8 R_SHOULDER=6
+uint8 L_ELBOW=7
+uint8 R_ELBOW=8
+uint8 L_WRIST=9
+uint8 R_WRIST=10
+uint8 L_HIP=11
+uint8 R_HIP=12
+uint8 L_KNEE=13
+uint8 R_KNEE=14
+uint8 L_ANKLE=15
+uint8 R_ANHLE=16
+
+float64 x
+float64 y
+float64 score
+uint8 id

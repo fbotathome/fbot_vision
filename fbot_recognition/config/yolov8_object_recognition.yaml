@@ -1,0 +1,38 @@
+yolov8_recognition:
+  ros__parameters:
+
+    threshold: 0.6
+
+    classes_by_category: '{"Drinks": ["person", "Coke", "Fanta", "Kuat", "Papaya", "Pithula"], 
+                          "Cleaning supplies": ["Cloth", "Soap", "SteelWool"], 
+                          "Pantry items": ["ToothPick", "Cappuccino", "Gelatin", "MilkCream", "TomatoSauce"], 
+                          "Fruits": ["Apple", "Kiwi", "Lemon", "Sicilian_Lemon"], 
+                          "Snacks": ["fillet", "Onion", "Pepperoni", "Wafer"]}'
+      
+    max_sizes:
+        - [10.0, 10.0, 10.0]
+
+    model_file: yolov8n.pt
+
+    subscribers:
+      
+      slop: 0.2
+      qos_profile: 1
+
+      image_rgb: /cam1/color/image_raw
+      camera_info: /cam1/color/camera_info
+      image_depth: /cam1/aligned_depth_to_color/image_raw
+      
+    publishers:
+
+      object_recognition:
+        topic: /fbot_vision/fr/object_recognition
+        qos_profile: 1
+      
+      people_detection:
+        topic: /fbot_vision/fr/people_detection
+        qos_profile: 1
+
+      debug:
+        topic: /fbot_vision/fr/debug
+        qos_profile: 1
