@@ -6,7 +6,7 @@ from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 import message_filters
 
-from sensor_msgs.msg import Image, CameraInfo, PointCloud2
+from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
 SOURCES_TYPES = {

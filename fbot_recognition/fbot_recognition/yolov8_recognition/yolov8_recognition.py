@@ -12,15 +12,11 @@ from ultralytics import YOLO
 from std_msgs.msg import Header
 from builtin_interfaces.msg import Duration
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import Vector3
 from visualization_msgs.msg import Marker, MarkerArray
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 
 from ament_index_python.packages import get_package_share_directory
-
-
-
 
 #TODO: Allocate and deallocate model in the right way
 #TODO Implement people detection
