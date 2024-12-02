@@ -1,1 +1,5 @@
-fbot_recognition/weights/*
+*.vscode*
+*__pycache__*
+*.csv
+*.dat
+*.pt
