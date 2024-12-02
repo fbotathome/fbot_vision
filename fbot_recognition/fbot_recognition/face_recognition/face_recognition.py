@@ -2,6 +2,8 @@ import rclpy
 
 from fbot_recognition import BaseRecognition
 
+from sensor_msgs.msg import Image, CameraInfo
+
 
 class FaceRecognition(BaseRecognition):
     def __init__(self):
@@ -20,7 +22,7 @@ class FaceRecognition(BaseRecognition):
     def unLoadModel(self):
         pass
 
-    def callback(self, *args):
+    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         pass
 
     def declareParameters(self):
@@ -30,3 +32,14 @@ class FaceRecognition(BaseRecognition):
     def readParameters(self):
         super().readParameters()
         self.modelPath = self.pkgPath + '/' + self.get_parameter('model_path').value
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = FaceRecognition()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
