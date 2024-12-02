@@ -222,6 +222,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("classes_by_category", "")
         self.declare_parameter("model_file", "yolov8n.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
+        super().declareParameters()
 
     def readParameters(self):
         self.debugImageTopic = self.get_parameter("publishers.debug.topic").value

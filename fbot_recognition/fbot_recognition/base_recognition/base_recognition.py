@@ -47,9 +47,13 @@ class BaseRecognition(Node):
     def callback(self, *args):
         pass
 
-    def readParameters(self):
+    def declareParameters(self):
         for source in SOURCES_TYPES:
             self.declare_parameter(f'subscribers.{source}', "")
+
+
+    def readParameters(self):
+        for source in SOURCES_TYPES:
             self.topicsToSubscribe[source] = self.get_parameter(f'subscribers.{source}').value 
         self.slop = self.topicsToSubscribe.pop('slop', 0.1)
         self.qosProfile = self.topicsToSubscribe.pop('qos_profile', 1)
