@@ -39,13 +39,13 @@ class BaseRecognition(Node):
         self.cvBridge = CvBridge()
 
     def loadModel(self):
-        pass
+        raise NotImplementedError("loadModel method not implemented in BaseRecognition class")
 
-    def unLoadModel(self):
-        pass
+    def unloadModel(self):
+        raise NotImplementedError("unloadModel method not implemented in BaseRecognition class")
 
     def callback(self, *args):
-        pass
+        raise NotImplementedError("callback method not implemented in BaseRecognition class")
 
     def declareParameters(self):
         for source in SOURCES_TYPES:
