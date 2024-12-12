@@ -8,7 +8,7 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
-from fbot_vision_msgs.srv import PeopleIntroducing, PeopleIntroducingResponse
+from fbot_vision_msgs.srv import PeopleIntroducing
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Vector3
 
@@ -18,18 +18,18 @@ import os
 import cv2
 import face_recognition
 import time
-import rospkg
+from ament_index_python.packages import get_package_share_directory
 from collections import Counter
 import pickle
 
 
 
-packagePath = rospkg.RosPack().get_path('fbot_recognition')
 
 class FaceRecognition(BaseRecognition):
     def __init__(self):
         super().__init__(packageName='fbot_recognition', nodeName='face_recognition')
-        datasetPath = os.path.join(PACK_DIR, 'dataset')
+        packagePath = get_package_share_directory('fbot_recognition')
+        datasetPath = os.path.join(packagePath, 'dataset')
         self.featuresPath = os.path.join(datasetPath, 'features')
         self.peopleDatasetPath = os.path.join(datasetPath, 'people/')
         self.declareParameters()
@@ -41,9 +41,10 @@ class FaceRecognition(BaseRecognition):
         self.knownFaces = self.flatten(knownFacesDict)
 
     def initRosComm(self):
-        self.debugPublisher = self.create_publisher(self.debugImageTopic, Image, queue_size=self.debugQosProfile)
-        self.faceRecognitionPublisher = self.create_publisher(self.faceRecognitionTopic, Detection3DArray, queue_size=self.faceRecognitionQosProfile)
-        self.introductPersonService = self.create_publisher(self.introductPersonServername, PeopleIntroducing, self.PeopleIntroducing)
+        # print(self.debugImageTopic, self.faceRecognitionTopic, self.introducePersonServername)
+        self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
+        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
+        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB)
         super().initRosComm(callbackObject=self)
 
     def loadModel(self):
@@ -118,20 +119,19 @@ class FaceRecognition(BaseRecognition):
 
     def declareParameters(self):
         self.declare_parameter("publishers.debug.qos_profile", 1)
-        self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug")
+        self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug_face")
         self.declare_parameter("publishers.face_recognition.qos_profile", 1)
         self.declare_parameter("publishers.face_recognition.topic", "/fbot_vision/fr/face_recognition")
-        self.declare_parameter("servers.introduct_person.servername", "/fbot_vision/br/introduct_person")
-
-        super().declareParameters()
+        self.declare_parameter("servers.introduce_person.servername", "/fbot_vision/fr/introduce_person")
         self.declare_parameter('model_path', 'weights/face_recognition/face_recognition.pth')
+        super().declareParameters()
 
     def readParameters(self):
         self.debugImageTopic = self.get_parameter("publishers.debug.topic").value
         self.debugQosProfile = self.get_parameter("publishers.debug.qos_profile").value
         self.faceRecognitionTopic = self.get_parameter("publishers.face_recognition.topic").value
         self.faceRecognitionQosProfile = self.get_parameter("publishers.face_recognition.qos_profile").value
-        self.introductPersonServername = self.get_parameter("servers.introduct_person.servername").value
+        self.introducePersonServername = self.get_parameter("servers.introduce_person.servername").value
 
 
         super().readParameters()
@@ -160,7 +160,7 @@ class FaceRecognition(BaseRecognition):
         keysList = [item for name in l.keys() for item in [name]*len(l[name])]
         return keysList, valuesList
 
-    def encode_faces(self):
+    def encodeFaces(self):
 
         encodings = []
         names = []
@@ -203,7 +203,7 @@ class FaceRecognition(BaseRecognition):
         self.saveVar(encodedFace, 'features')             
 
 
-    def PeopleIntroducing(self, peopleIntroducingService):
+    def peopleIntroducingCB(self, peopleIntroducingService):
 
         name = peopleIntroducingService.name
         numImages = peopleIntroducingService.num_images
@@ -262,7 +262,7 @@ class FaceRecognition(BaseRecognition):
         response = PeopleIntroducingResponse()
         response.response = True
 
-        self.encode_faces()
+        self.encodeFaces()
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)

@@ -1,0 +1,26 @@
+face_recognition:
+  ros__parameters:
+
+    subscribers:
+      
+      qos_profile: 1
+      slop: 0.2
+
+      image_rgb: /camera/camera/color/image_raw
+      camera_info: /camera/camera/color/camera_info
+      image_depth: /camera/camera/aligned_depth_to_color/image_raw
+
+
+    publishers:
+
+      face_recognition:
+        topic: /fbot_vision/fr/face_recognition
+        qos_profile: 1
+      debug:
+        topic: /fbot_vision/fr/debug_face
+        qos_profile: 1
+
+    servers:
+
+      introduce_person:
+        service: /fbot_vision/fr/introduce_person
