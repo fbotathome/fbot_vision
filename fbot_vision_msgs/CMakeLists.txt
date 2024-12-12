@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Keypoint3D.msg"  
   "msg/Detection3D.msg"
   "msg/Detection3DArray.msg"
+  "srv/PeopleIntroducing.srv"
   DEPENDENCIES std_msgs geometry_msgs sensor_msgs vision_msgs
 )
 
