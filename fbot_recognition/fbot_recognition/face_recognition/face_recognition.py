@@ -1,16 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import rclpy
-
-import face_recognition
-
-from fbot_recognition import BaseRecognition
-
-from std_msgs.msg import Header
-from sensor_msgs.msg import Image, CameraInfo
-from fbot_vision_msgs.msg import Detection3D, Detection3DArray
-from vision_msgs.msg import BoundingBox2D, BoundingBox3D
-from fbot_vision_msgs.srv import PeopleIntroducing
-from sensor_msgs.msg import Image
-from geometry_msgs.msg import Vector3
 
 
 import numpy as np
@@ -22,6 +12,14 @@ from ament_index_python.packages import get_package_share_directory
 from collections import Counter
 import pickle
 
+from fbot_recognition import BaseRecognition
+
+from std_msgs.msg import Header
+from sensor_msgs.msg import Image, CameraInfo
+from fbot_vision_msgs.msg import Detection3D, Detection3DArray
+from vision_msgs.msg import BoundingBox2D, BoundingBox3D
+from fbot_vision_msgs.srv import PeopleIntroducing
+from geometry_msgs.msg import Vector3
 
 
 
@@ -40,6 +38,8 @@ class FaceRecognition(BaseRecognition):
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
 
+        self.lastImage = None
+
     def initRosComm(self):
         # print(self.debugImageTopic, self.faceRecognitionTopic, self.introducePersonServername)
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
@@ -54,11 +54,13 @@ class FaceRecognition(BaseRecognition):
         pass
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+
+        self.lastImage = imageMsg
+
         threshold = 0.5
         faceRecognitions = Detection3DArray()
         # sourceData = self.sourceDataFromArgs(args)
 
-        
         # h.seq = self.seq
         # self.seq += 1
         # h.stamp = rospy.Time.now()
@@ -100,10 +102,11 @@ class FaceRecognition(BaseRecognition):
             # detection.score = 1
             # detection.max_size = Vector3(*[0.2, 0.2, 0.2])
             size = int(right-left), int(bottom-top)
-            detection.bbox2d.center.x = int(left) + int(size[1]/2)
-            detection.bbox2d.center.y = int(top) + int(size[0]/2)
-            detection.bbox2d.size_x = bottom-top
-            detection.bbox2d.size_y = right-left
+            print(detection.bbox2d.center)
+            detection.bbox2d.center.position.x = float(int(left) + int(size[1]/2))
+            detection.bbox2d.center.position.y = float(int(top) + int(size[0]/2))
+            detection.bbox2d.size_x = float(bottom-top)
+            detection.bbox2d.size_y = float(right-left)
 
             cv2.rectangle(debugImg, (left, top), (right, bottom), (0, 255, 0), 2)
             
@@ -112,10 +115,11 @@ class FaceRecognition(BaseRecognition):
             # description_header.seq += 1
 
             faceRecognitions.detections.append(detection)
-            
-        self.debug_publisher.publish(self.cvBridge.cv2_to_imgmsg(Image, debug_img, 'bgr8'))
-        if len(face_rec.descriptions) > 0:
-            self.face_recognition_publisher.publish(faceRecognitions)
+        print(type(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8')))
+        self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8'))
+
+        if len(faceRecognitions.detections) > 0:
+            self.faceRecognitionPublisher.publish(faceRecognitions)
 
     def declareParameters(self):
         self.declare_parameter("publishers.debug.qos_profile", 1)
@@ -203,10 +207,11 @@ class FaceRecognition(BaseRecognition):
         self.saveVar(encodedFace, 'features')             
 
 
-    def peopleIntroducingCB(self, peopleIntroducingService):
-
-        name = peopleIntroducingService.name
-        numImages = peopleIntroducingService.num_images
+    def peopleIntroducingCB(self, peopleIntroducingRequest, peopleIntroducingResponse):
+        # print(teste)
+        # self.get_logger().warning(f"{teste}")
+        name = peopleIntroducingRequest.name
+        numImages = peopleIntroducingRequest.num_images
         dirName = os.path.join(self.peopleDatasetPath, name)
         os.makedirs(dirName, exist_ok=True)
         os.makedirs(self.featuresPath, exist_ok=True)
@@ -240,33 +245,35 @@ class FaceRecognition(BaseRecognition):
 
         i = 0
         while i < numImages:
-            self.regressiveCounter(peopleIntroducingService.interval)
-            try:
-                image = rospy.wait_for_message(self.subscribers['image_rgb'], Image, 1000)
-            except (ROSException, ROSInterruptException) as e:
-                break
+            self.regressiveCounter(peopleIntroducingRequest.interval)
+            # try:
+            #image = rclpy.wait_for_message.wait_for_message(self.subscribers['image_rgb'], Image, 1000)
+            # except (ROSException, ROSInterruptException) as e:
+            #     break
 
+            imageMsg = self.lastImage
             cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg)
+            self.get_logger().warning(self.lastImage.header)
             
-            faceLocations = faceRecognition.face_locations(imageNP, model='yolov8')
+            faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
                 
             if len(faceLocations) > 0:
-                imageNP = cv2.cvtColor(imageNP, cv2.COLOR_BGR2RGB)
-                cv2.imwrite(os.path.join(dirName, addImageLabels[i]), imageNP)
-                rospy.logwarn('Picture ' + addImageLabels[i] + ' was  saved.')
+                cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
+                cv2.imwrite(os.path.join(dirName, addImageLabels[i]), cvImage)
+                self.get_logger().warning('Picture ' + addImageLabels[i] + ' was  saved.')
                 i+= 1
             else:
-                rospy.logerr("The face was not detected.")
+                self.get_logger().warning("The face was not detected.")
 
         cv2.destroyAllWindows()
-        response = PeopleIntroducingResponse()
-        response.response = True
+        
+        peopleIntroducingResponse.response = True
 
         self.encodeFaces()
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
-        return response
+        return peopleIntroducingResponse
 
 
 def main(args=None):
