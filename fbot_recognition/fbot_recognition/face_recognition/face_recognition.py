@@ -21,7 +21,10 @@ from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
 
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 
+import rclpy.wait_for_message
 
 class FaceRecognition(BaseRecognition):
     def __init__(self):
@@ -41,10 +44,12 @@ class FaceRecognition(BaseRecognition):
         self.lastImage = None
 
     def initRosComm(self):
+        self.groupTopic = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
+        self.groupServer = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
         # print(self.debugImageTopic, self.faceRecognitionTopic, self.introducePersonServername)
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
-        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB)
+        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile, callback_group=self.groupTopic)
+        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB, callback_group=self.groupServer)
         super().initRosComm(callbackObject=self)
 
     def loadModel(self):
@@ -179,20 +184,20 @@ class FaceRecognition(BaseRecognition):
                 pix = os.listdir(self.peopleDatasetPath + person)
 
                 for personImg in pix:
-                    face = face_recognition.load_image_file(self.peopleDatasetPath + person + "/" + person_img)
+                    face = face_recognition.load_image_file(self.peopleDatasetPath + person + "/" + personImg)
                     faceBBs = face_recognition.face_locations(face, model = 'yolov8')
 
                     largestFace = None
                     largestArea = -float('inf')
-                    for top, right, bottom, left in face_bounding_boxes:
+                    for top, right, bottom, left in faceBBs:
                         area = (bottom - top)*(right - left)
                         if area > largestArea:
                             largestArea = area
                             largestFace = (top, right, bottom, left)
 
                     if largestFace is not None:
-                        faceEncoding = face_recognition.face_encodings(face, known_face_locations=[M_face])[0]
-                        encodings.append(faceEncodings)
+                        faceEncoding = face_recognition.face_encodings(face, known_face_locations=[largestFace])[0]
+                        encodings.append(faceEncoding)
 
                         if person not in names:
                             names.append(person)
@@ -208,8 +213,6 @@ class FaceRecognition(BaseRecognition):
 
 
     def peopleIntroducingCB(self, peopleIntroducingRequest, peopleIntroducingResponse):
-        # print(teste)
-        # self.get_logger().warning(f"{teste}")
         name = peopleIntroducingRequest.name
         numImages = peopleIntroducingRequest.num_images
         dirName = os.path.join(self.peopleDatasetPath, name)
@@ -222,9 +225,11 @@ class FaceRecognition(BaseRecognition):
         i = 1
         k = 0
         j = numImages
-        number = [] 
+        number = []
+
         for label in imageLabels:
-            number.append(int(label.replace(imageType, '')))
+            self.get_logger().warning(label)
+            number.append(int(float(label.replace(imageType, ''))))
         
         number.sort()
         n = 1
@@ -247,13 +252,11 @@ class FaceRecognition(BaseRecognition):
         while i < numImages:
             self.regressiveCounter(peopleIntroducingRequest.interval)
             # try:
-            #image = rclpy.wait_for_message.wait_for_message(self.subscribers['image_rgb'], Image, 1000)
-            # except (ROSException, ROSInterruptException) as e:
-            #     break
-
-            imageMsg = self.lastImage
-            cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg)
-            self.get_logger().warning(self.lastImage.header)
+            # _,image = rclpy.wait_for_message.wait_for_message(Image, self, 'camera/camera/color/image_raw')
+            image = self.lastImage
+            # self.get_logger().warning(image[0])
+            cvImage = self.cvBridge.imgmsg_to_cv2(image)
+            # self.get_logger().warning(self.lastImage.header)
             
             faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
                 
@@ -279,7 +282,10 @@ class FaceRecognition(BaseRecognition):
 def main(args=None):
     rclpy.init(args=args)
     node = FaceRecognition()
-    rclpy.spin(node)
+    executor = MultiThreadedExecutor(num_threads=6)
+    executor.add_node(node)
+    executor.spin()
+    # rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 
