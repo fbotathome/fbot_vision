@@ -21,10 +21,8 @@ from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
 
-from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
-
 import rclpy.wait_for_message
+
 
 class FaceRecognition(BaseRecognition):
     def __init__(self):
@@ -41,15 +39,10 @@ class FaceRecognition(BaseRecognition):
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
 
-        self.lastImage = None
-
     def initRosComm(self):
-        self.groupTopic = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
-        self.groupServer = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
-        # print(self.debugImageTopic, self.faceRecognitionTopic, self.introducePersonServername)
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile, callback_group=self.groupTopic)
-        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB, callback_group=self.groupServer)
+        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
+        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB)
         super().initRosComm(callbackObject=self)
 
     def loadModel(self):
@@ -59,21 +52,10 @@ class FaceRecognition(BaseRecognition):
         pass
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
-
-        self.lastImage = imageMsg
-
-        threshold = 0.5
         faceRecognitions = Detection3DArray()
-        # sourceData = self.sourceDataFromArgs(args)
-
-        # h.seq = self.seq
-        # self.seq += 1
-        # h.stamp = rospy.Time.now()
-        # h = Header()
         faceRecognitions.header = imageMsg.header
         faceRecognitions.image_rgb = imageMsg 
         
-        #rospy.loginfo('Image ID: ' + str(img.header.seq))
 
         cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg)
 
@@ -93,7 +75,7 @@ class FaceRecognition(BaseRecognition):
                 faceDistanceMinIndex = np.argmin(faceDistances)
                 minDistance = faceDistances[faceDistanceMinIndex]
 
-                if minDistance < threshold:
+                if minDistance < self.threshold:
                     name = (self.knownFaces[0][faceDistanceMinIndex])
             detection.label = name
 
@@ -102,10 +84,6 @@ class FaceRecognition(BaseRecognition):
             detectionHeader = imageMsg.header
 
             detection.header = detectionHeader
-            # detection.type = Description2D.DETECTION
-            # detection.id = description.header.seq
-            # detection.score = 1
-            # detection.max_size = Vector3(*[0.2, 0.2, 0.2])
             size = int(right-left), int(bottom-top)
             print(detection.bbox2d.center)
             detection.bbox2d.center.position.x = float(int(left) + int(size[1]/2))
@@ -117,7 +95,7 @@ class FaceRecognition(BaseRecognition):
             
             font = cv2.FONT_HERSHEY_DUPLEX
             cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
-            # description_header.seq += 1
+           
 
             faceRecognitions.detections.append(detection)
         print(type(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8')))
@@ -133,6 +111,7 @@ class FaceRecognition(BaseRecognition):
         self.declare_parameter("publishers.face_recognition.topic", "/fbot_vision/fr/face_recognition")
         self.declare_parameter("servers.introduce_person.servername", "/fbot_vision/fr/introduce_person")
         self.declare_parameter('model_path', 'weights/face_recognition/face_recognition.pth')
+        self.declare_parameter("threshold", 0.8)
         super().declareParameters()
 
     def readParameters(self):
@@ -141,6 +120,7 @@ class FaceRecognition(BaseRecognition):
         self.faceRecognitionTopic = self.get_parameter("publishers.face_recognition.topic").value
         self.faceRecognitionQosProfile = self.get_parameter("publishers.face_recognition.qos_profile").value
         self.introducePersonServername = self.get_parameter("servers.introduce_person.servername").value
+        self.threshold = self.get_parameter("threshold").value
 
 
         super().readParameters()
@@ -251,12 +231,9 @@ class FaceRecognition(BaseRecognition):
         i = 0
         while i < numImages:
             self.regressiveCounter(peopleIntroducingRequest.interval)
-            # try:
-            # _,image = rclpy.wait_for_message.wait_for_message(Image, self, 'camera/camera/color/image_raw')
-            image = self.lastImage
-            # self.get_logger().warning(image[0])
+            
+            _,image = rclpy.wait_for_message.wait_for_message(Image, self, self.topicsToSubscribe['image_rgb'])
             cvImage = self.cvBridge.imgmsg_to_cv2(image)
-            # self.get_logger().warning(self.lastImage.header)
             
             faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
                 
@@ -282,10 +259,8 @@ class FaceRecognition(BaseRecognition):
 def main(args=None):
     rclpy.init(args=args)
     node = FaceRecognition()
-    executor = MultiThreadedExecutor(num_threads=6)
-    executor.add_node(node)
-    executor.spin()
-    # rclpy.spin(node)
+    
+    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 
