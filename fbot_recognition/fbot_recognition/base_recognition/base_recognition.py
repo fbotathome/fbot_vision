@@ -39,13 +39,13 @@ class BaseRecognition(Node):
         self.cvBridge = CvBridge()
 
     def loadModel(self):
-        pass
+        raise NotImplementedError("loadModel must be implemented on recognition node class")
 
     def unLoadModel(self):
-        pass
+        raise NotImplementedError("unloadModel must be implemented on recognition node class")
 
     def callback(self, *args):
-        pass
+        raise NotImplementedError("callback must be implemented on recognition node class")
 
     def declareParameters(self):
         for source in SOURCES_TYPES:
