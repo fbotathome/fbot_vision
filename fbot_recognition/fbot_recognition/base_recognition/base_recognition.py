@@ -14,6 +14,12 @@ SOURCES_TYPES = {
         'image_rgb': Image,
         'image_depth': Image
     }
+
+DEFAULT_TOPICS = {
+    'camera_info' : "/fbot_vision/bvb/camera_info",
+    'image_rgb' : "/fbot_vision/bvb/image_rgb",
+    'image_depth': "/fbot_vision/bvb/image_depth",
+}
 class BaseRecognition(Node):
     def __init__(self, packageName='fbot_recognition', nodeName='base_recognition'):
         super().__init__(nodeName)
@@ -49,7 +55,7 @@ class BaseRecognition(Node):
 
     def declareParameters(self):
         for source in SOURCES_TYPES:
-            self.declare_parameter(f'subscribers.{source}', "")
+            self.declare_parameter(f'subscribers.{source}', DEFAULT_TOPICS[source])
 
 
     def readParameters(self):

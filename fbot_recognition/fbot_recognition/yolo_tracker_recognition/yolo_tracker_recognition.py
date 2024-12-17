@@ -2,28 +2,48 @@
 
 import rclpy
 import torch
+
+from time import perf_counter
+
 from ultralytics import YOLO
 from ReIDManager import ReIDManager
 from fbot_recognition import BaseRecognition
-
+from vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray
+from sensor_msgs.msg import Image, CameraInfo
+from std_srvs.srv import Empty
 from ament_index_python.packages import get_package_share_directory
 
 class YoloTrackerRecognition(BaseRecognition):
     def __init__(self, node_name):
-
-        self.tracking = False
         super().__init__(nodeName=node_name)
+        self.tracking = False
+        self.reid_manager = None
+        self.declareParameters()
+        self.readParameters()
+        self.loadModel()
+        self.initRosComm()
+        if self.tracking_on_init:
+            self.startTracking()
+        # self.loadModel()
 
-    def initRosComm(self, callbackObject=None):
-        return super().initRosComm(callbackObject)
+    def initRosComm(self):
+        super().initRosComm(self)
+        self.debugPub = self.create_publisher(Image, self.debug_topic, qos_profile=1)
+        self.recognitionPub = self.create_publisher(Detection2DArray, self.recognition_topic, qos_profile=1)
+        self.trackingPub = self.create_publisher(Detection2DArray, self.tracking_topic, qos_profile=1)
+        
+        self.trackingStartService = self.create_service(Empty, self.start_tracking_topic, self.startTracking)
+        self.trackingStopService = self.create_service(Empty, self.stop_tracking_topic, self.stopTracking)
     
     def loadModel(self):
         self.get_logger().info(f"Loading model: {self.model_file}")
         self.model = YOLO(self.model_file)
         if self.tracking:
-            pass
+            self.loadTrackerModel()
 
     def loadTrackerModel(self):
+        if self.reid_manager != None:
+            return
         self.reid_manager = ReIDManager(
             self.reid_model_file,
             self.reid_threshold,
@@ -35,16 +55,32 @@ class YoloTrackerRecognition(BaseRecognition):
         del self.model
         torch.cuda.empty_cache()
         self.model = None
+        self.loadTrackerModel()
         return
     
-    def unloadTrackerModel(self):
+    def unLoadTrackerModel(self):
+        if self.reid_manager == None:
+            return
         self.reid_manager.clean()
+    
+    def startTracking(self,req : Empty.Request, resp : Empty.Response):
+        self.loadTrackerModel()
+        self.trackID = -1
+        self.lastTrack = perf_counter()
+        self.tracking = True
+        self.get_logger().info("Tracking started!!!")
+        return Empty()
+    
+    def stopTracking(self, req : Empty.Request, resp : Empty.Response):
+        self.tracking = False
+        self.unLoadTrackerModel()
+        self.get_logger().info("Tracking stoped!!!")
 
-    def callback(self, *args):
-        pass
+    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+        self.get_logger().warn("Message arrived")
 
     def declareParameters(self):
-
+        super().declareParameters()
         self.declare_parameter("publishers.debug.topic","/fbot_vision/br/debug")
         self.declare_parameter("publishers.pose_recognition.queue_size",1)
         self.declare_parameter("publishers.recognition.topic", "/fbot_vision/br/recognition")
@@ -60,7 +96,7 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.declare_parameter("model_file","yolov8n-pose")
         self.declare_parameter("tracking.model_file","resnet_reid_model.pt")
-        self.declareParameters("tracking.model_name","resnet50.pt")
+        self.declare_parameter("tracking.model_name","resnet50.pt")
 
         self.declare_parameter("tracking.thresholds.det_threshold", 0.5)
         self.declare_parameter("tracking.thresholds.reid_threshold", 0.75)
@@ -73,10 +109,14 @@ class YoloTrackerRecognition(BaseRecognition):
         self.declare_parameter("tracking.reid_img_size.height",256)
         self.declare_parameter("tracking.reid_img_size.width",128)
 
-        return super().declareParameters()
+        # self.declare_parameter("tracking.model_name",128)
+
+        return 
     
     def readParameters(self):
+        super().readParameters()
         self.debug_topic = self.get_parameter("publishers.debug.topic").value
+        print(f"VALOR: {self.debug_topic}")
         self.debug_qs = self.get_parameter("publishers.pose_recognition.queue_size").value
 
         self.recognition_topic = self.get_parameter("publishers.recognition.topic").value
@@ -94,7 +134,7 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.model_file = share_directory + "/weigths/" + self.get_parameter("model_file").value
         self.reid_model_file = share_directory + "/weigths/" + self.get_parameter("tracking.model_file").value
-        self.reid_model_name = self.get_parameter("tracking/model_name").value
+        self.reid_model_name = self.get_parameter("tracking.model_name").value
 
         self.det_threshold = self.get_parameter("tracking.thresholds.det_threshold").value
         self.reid_threshold = self.get_parameter("tracking.thresholds.reid_threshold").value
@@ -105,9 +145,6 @@ class YoloTrackerRecognition(BaseRecognition):
         self.tracking_on_init = self.get_parameter("tracking.start_on_init").value
 
         self.reid_img_size = (self.get_parameter("tracking.reid_img_size.height").value,self.get_parameter("tracking.reid_img_size.width").value)
-
-        super().readParameters()
-        return super().readParameters()
     
 
     
