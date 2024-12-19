@@ -219,31 +219,21 @@ class FaceRecognition(BaseRecognition):
 
         imageLabels = os.listdir(dirName)
         addImageLabels = []
-        i = 1
-        k = 0
-        j = numImages
-        number = []
+        currentIndex = 1
+        existingNumbers = [] 
 
         for label in imageLabels:
-            
-            number.append(int(float(label.replace(imageType, ''))))
-        
-        number.sort()
-        n = 1
-        while j > 0:
-            if k < len(number):
-                n = number[k] + 1
-                if number[k] == i:
-                    k += 1
-                else:
-                    addImageLabels.append((str(i) + imageType))
-                    j -= 1      
-                i += 1 
+            existingNumbers.append(int(label.replace(imageType, '')))
 
+        existingNumbers.sort()
+
+        i = 0
+        while len(addImageLabels) < numImages:
+            if i < len(existingNumbers) and existingNumbers[i] == currentIndex:
+                i += 1  
             else:
-                addImageLabels.append(str(n) + imageType)
-                j -= 1
-                n += 1
+                addImageLabels.append(str(currentIndex) + imageType)  
+            currentIndex += 1
 
         i = 0
         while i < numImages:
