@@ -13,7 +13,6 @@ int64 id #local id on image (can come from detection or instance segmentation) (
 int64 global_id #global id to identify a description (optional)
 string label #class detected by classification, detection, semantic segmentation or instance segmentation 
 int64 class_num
-geometry_msgs/Vector3 max_size #max 3D size of a object, can be used to filter 3d bounding box 
 float64 score #score of the description given by the algorithm
 
 sensor_msgs/Image mask #segmentation mask (optional)

@@ -2,13 +2,16 @@
 
 import rclpy
 import torch
-
+import cv_bridge
+import cv2 as cv
 from time import perf_counter
+
+from copy import deepcopy
 
 from ultralytics import YOLO
 from ReIDManager import ReIDManager
 from fbot_recognition import BaseRecognition
-from vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray
+from fbot_vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray, KeyPoint2D
 from sensor_msgs.msg import Image, CameraInfo
 from std_srvs.srv import Empty
 from ament_index_python.packages import get_package_share_directory
@@ -18,12 +21,15 @@ class YoloTrackerRecognition(BaseRecognition):
         super().__init__(nodeName=node_name)
         self.tracking = False
         self.reid_manager = None
+        self.lastTrack = perf_counter()
+        self.cv_bridge = cv_bridge.CvBridge()
         self.declareParameters()
         self.readParameters()
         self.loadModel()
         self.initRosComm()
         if self.tracking_on_init:
             self.startTracking()
+        self.get_logger().info(f"Node started!!!")
         # self.loadModel()
 
     def initRosComm(self):
@@ -46,6 +52,7 @@ class YoloTrackerRecognition(BaseRecognition):
             return
         self.reid_manager = ReIDManager(
             self.reid_model_file,
+            self.reid_model_name,
             self.reid_threshold,
             self.reid_add_feature_threshold,
             self.reid_img_size
@@ -69,7 +76,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.lastTrack = perf_counter()
         self.tracking = True
         self.get_logger().info("Tracking started!!!")
-        return Empty()
+        return resp
     
     def stopTracking(self, req : Empty.Request, resp : Empty.Response):
         self.tracking = False
@@ -78,6 +85,157 @@ class YoloTrackerRecognition(BaseRecognition):
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         self.get_logger().warn("Message arrived")
+
+        tracking = self.tracking
+
+        img = imageMsg
+        img_depth = depthMsg
+        camera_info = cameraInfoMsg
+        HEADER = img.header
+
+        recognition = Detection2DArray()
+        recognition.image_rgb = img
+        # recognition.image_depth = img_depth
+        # recognition.camera_info = camera_info
+        recognition.header = HEADER
+        recognition.detections = []
+        img = self.cv_bridge.imgmsg_to_cv2(img, "bgr8")
+
+        debug_img = deepcopy(img)
+        debug_img = cv.cvtColor(debug_img, cv.COLOR_BGR2RGB)
+        results = None
+        bboxs   = None
+
+        if tracking:
+            results = list(self.model.track(img, persist=True,
+                                        conf=self.det_threshold,
+                                        iou=self.iou_threshold,
+                                        device="cuda:0",
+                                        tracker=self.tracker_cfg_file,
+                                        verbose=True, stream=True))
+            bboxs = results[0].boxes.data.cpu().numpy()
+        else:
+            results = list(self.model.predict(img, verbose=False, stream=True))
+            bboxs = results[0].boxes.data.cpu().numpy()
+
+        people_ids = []
+
+        tracked_box = None
+        now = perf_counter()
+        is_aged = (now - self.lastTrack >= self.max_time)
+        is_id_found = False
+        previus_size = float("-inf")
+        new_id = -1
+        # descriptions = []
+        ids = []
+        if results[0].boxes.is_track:
+            img_patchs = []
+            for x1,y1,x2,y2 in results[0].boxes.xyxy.cpu().numpy():
+                img_patchs.append(img[int(y1):int(y2),int(x1):int(x2)])
+            ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+        for i, box in enumerate(bboxs):
+            description = Detection2D()
+            description.header = HEADER
+
+            X1,Y1,X2,Y2 = box[:4]
+            ID = int(ids[i]) if self.tracking and len(box) == 7 else -1
+            score = box[-2]
+            clss = int(box[-1])
+
+            description.bbox.center.position.x = (X1+X2)/2
+            description.bbox.center.position.y = (Y1+Y2)/2
+            description.bbox.size_x = float(X2-X1)
+            description.bbox.size_y = float(Y2-Y1)
+            description.label = self.model.names[clss]
+            description.type = Detection2D.DETECTION
+            description.score = float(score)
+            description.class_num = clss
+            description.id = i
+
+            box_label = ""
+            if tracking:
+                description.global_id = ID
+                if description.label == "person":
+                    people_ids.append(ID)                 
+                
+                box_label = f"ID:{ID} "
+                size = description.bbox.size_x * description.bbox.size_y
+
+                if ID == self.trackID:
+                    is_id_found = True
+                    tracked_box = description
+
+                if (not is_id_found) and (is_aged or self.trackID == -1):
+                    if tracked_box is None or size > previus_size:
+                        previus_size = size
+                        tracked_box = description
+                        new_id = ID                    
+
+            recognition.detections.append(description)
+
+            cv.rectangle(debug_img,(int(X1),int(Y1)), (int(X2),int(Y2)),(0,0,255),thickness=2)
+            cv.putText(debug_img,f"{box_label}{self.model.names[clss]}:{score:.2f}", (int(X1), int(Y1)), cv.FONT_HERSHEY_SIMPLEX,0.75,(0,0,255),thickness=2)
+        
+        track_recognition = Detection2DArray()
+        track_recognition.header = HEADER
+        tracked_description : Detection2D = deepcopy(tracked_box)
+        if tracked_box is not None:
+            track_recognition.header = recognition.header
+            track_recognition.image_rgb = recognition.image_rgb
+            # track_recognition.image_depth = recognition.image_depth
+            # track_recognition.camera_info = recognition.camera_info
+            tracked_description.type = Detection2D.DETECTION
+            if not is_id_found:
+                self.trackID = new_id
+            # recognition.descriptions.append(tracked_box)
+            self.lastTrack = now
+            cv.rectangle(debug_img,(int(tracked_box.bbox.center.position.x-tracked_box.bbox.size_x/2),\
+                                    int(tracked_box.bbox.center.position.y-tracked_box.bbox.size_y/2)),\
+                                    (int(tracked_box.bbox.center.position.x+tracked_box.bbox.size_x/2),\
+                                    int(tracked_box.bbox.center.position.y+tracked_box.bbox.size_y/2)),(255,0,0),thickness=2)
+            
+        
+        if results[0].keypoints != None:
+            poses = results[0].keypoints.data.cpu().numpy()
+            scores = results[0].boxes.conf.cpu().numpy()
+            poses_idx = scores > self.det_threshold
+            poses = poses[poses_idx]
+            counter = 0
+            # if not tracking or len(people_ids) == len(poses):
+            desc : Detection2D
+            for desc in recognition.detections:
+                if desc.label == "person" and desc.score >= self.det_threshold:
+                    desc.type = Detection2D.POSE
+                    # rospy.logwarn(desc.score)
+                    for idx, kpt in enumerate(poses[counter]):
+                        keypoint = KeyPoint2D()
+                        keypoint.x = float(kpt[0])
+                        keypoint.y = float(kpt[1])
+                        keypoint.id = idx
+                        keypoint.score = float(kpt[2])
+                        desc.pose.append(keypoint)
+                        if kpt[2] >= self.threshold:
+                            cv.circle(debug_img, (int(kpt[0]), int(kpt[1])),3,(0,255,0),thickness=-1)
+                        if tracking:
+                            desc.global_id = people_ids[counter]
+                    if tracked_box != None and tracked_description.global_id == desc.global_id:
+                        desc.header = HEADER
+                        tracked_description = desc
+                        for kpt in desc.pose:
+                            if kpt.score >= self.threshold:
+                                cv.circle(debug_img, (int(kpt.x), int(kpt.y)),3,(0,255,255),thickness=-1)
+                    counter +=1
+
+        track_recognition.detections.append(tracked_description)
+        # debug_msg = ros_numpy.msgify(Image, debug_img, encoding='bgr8')
+        debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
+        debug_msg.header = HEADER
+        self.debugPub.publish(debug_msg)
+        
+        if len(recognition.detections) > 0:
+            self.recognitionPub.publish(recognition)
+        if tracked_box != None and len(track_recognition.detections) > 0:
+            self.trackingPub.publish(track_recognition)
 
     def declareParameters(self):
         super().declareParameters()
@@ -94,9 +252,9 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.declare_parameter("debug_kpt_threshold", 0.5)
 
-        self.declare_parameter("model_file","yolov8n-pose")
+        self.declare_parameter("model_file","yolo11n-pose")
         self.declare_parameter("tracking.model_file","resnet_reid_model.pt")
-        self.declare_parameter("tracking.model_name","resnet50.pt")
+        self.declare_parameter("tracking.model_name","resnet50")
 
         self.declare_parameter("tracking.thresholds.det_threshold", 0.5)
         self.declare_parameter("tracking.thresholds.reid_threshold", 0.75)
@@ -109,6 +267,8 @@ class YoloTrackerRecognition(BaseRecognition):
         self.declare_parameter("tracking.reid_img_size.height",256)
         self.declare_parameter("tracking.reid_img_size.width",128)
 
+        self.declare_parameter("tracker-file","yolo_tracker_default_config.yaml")
+
         # self.declare_parameter("tracking.model_name",128)
 
         return 
@@ -116,7 +276,7 @@ class YoloTrackerRecognition(BaseRecognition):
     def readParameters(self):
         super().readParameters()
         self.debug_topic = self.get_parameter("publishers.debug.topic").value
-        print(f"VALOR: {self.debug_topic}")
+        # print(f"VALOR: {self.debug_topic}")
         self.debug_qs = self.get_parameter("publishers.pose_recognition.queue_size").value
 
         self.recognition_topic = self.get_parameter("publishers.recognition.topic").value
@@ -132,8 +292,8 @@ class YoloTrackerRecognition(BaseRecognition):
 
         share_directory = get_package_share_directory("fbot_recognition")
 
-        self.model_file = share_directory + "/weigths/" + self.get_parameter("model_file").value
-        self.reid_model_file = share_directory + "/weigths/" + self.get_parameter("tracking.model_file").value
+        self.model_file = share_directory + "/weights/" + self.get_parameter("model_file").value
+        self.reid_model_file = share_directory + "/weights/" + self.get_parameter("tracking.model_file").value
         self.reid_model_name = self.get_parameter("tracking.model_name").value
 
         self.det_threshold = self.get_parameter("tracking.thresholds.det_threshold").value
@@ -143,6 +303,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.max_time = self.get_parameter("tracking.thresholds.max_time").value
         self.max_age = self.get_parameter("tracking.thresholds.max_age").value
         self.tracking_on_init = self.get_parameter("tracking.start_on_init").value
+        self.tracker_cfg_file = share_directory + "/config/yolo_tracker_config/" + self.get_parameter("tracker-file").value
 
         self.reid_img_size = (self.get_parameter("tracking.reid_img_size.height").value,self.get_parameter("tracking.reid_img_size.width").value)
     
@@ -152,9 +313,14 @@ class YoloTrackerRecognition(BaseRecognition):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = YoloTrackerRecognition("yolo_tracker_recognition")
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+
+    try:
+        while rclpy.ok():
+            rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    # node.destroy_node()
+    rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name), glob.glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob.glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config/yolo_tracker_config'), glob.glob('config/yolo_tracker_config/*.yaml')),
         (os.path.join('share', package_name, 'weights'), glob.glob('weights/*')),
     ],
     install_requires=['setuptools'],
