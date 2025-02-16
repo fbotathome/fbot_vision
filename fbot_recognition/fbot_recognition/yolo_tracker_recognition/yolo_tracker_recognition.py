@@ -10,10 +10,18 @@ from copy import deepcopy
 
 from ultralytics import YOLO
 from ReIDManager import ReIDManager
+from image2world import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
 from fbot_recognition import BaseRecognition
-from fbot_vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray, KeyPoint2D
+import numpy as np
+
+from fbot_vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray, KeyPoint2D, KeyPoint3D
 from sensor_msgs.msg import Image, CameraInfo
+from vision_msgs.msg import BoundingBox2D, BoundingBox3D
+from std_msgs.msg import Header
 from std_srvs.srv import Empty
+
+from visualization_msgs.msg import Marker, MarkerArray
+from builtin_interfaces.msg import Duration
 from ament_index_python.packages import get_package_share_directory
 
 class YoloTrackerRecognition(BaseRecognition):
@@ -35,8 +43,11 @@ class YoloTrackerRecognition(BaseRecognition):
     def initRosComm(self):
         super().initRosComm(self)
         self.debugPub = self.create_publisher(Image, self.debug_topic, qos_profile=1)
-        self.recognitionPub = self.create_publisher(Detection2DArray, self.recognition_topic, qos_profile=1)
-        self.trackingPub = self.create_publisher(Detection2DArray, self.tracking_topic, qos_profile=1)
+        self.recognitionPub = self.create_publisher(Detection2DArray, self.recognition_topic, qos_profile=self.recognition_qs)
+        self.recognition3DPub = self.create_publisher(Detection3DArray, self.recognition3D_topic, qos_profile=self.recognition3D_qs)
+        self.trackingPub = self.create_publisher(Detection2DArray, self.tracking_topic, qos_profile=self.recognition_qs)
+        
+        self.markerPublisher = self.create_publisher(MarkerArray,'pub/markers',qos_profile=1)
         
         self.trackingStartService = self.create_service(Empty, self.start_tracking_topic, self.startTracking)
         self.trackingStopService = self.create_service(Empty, self.stop_tracking_topic, self.stopTracking)
@@ -95,6 +106,12 @@ class YoloTrackerRecognition(BaseRecognition):
 
         recognition = Detection2DArray()
         recognition.image_rgb = img
+
+        recognition3D = Detection3DArray()
+        data = BoundingBoxProcessingData()
+        data.sensor.setSensorData(camera_info, img_depth)
+
+        
         # recognition.image_depth = img_depth
         # recognition.camera_info = camera_info
         recognition.header = HEADER
@@ -169,9 +186,11 @@ class YoloTrackerRecognition(BaseRecognition):
                     if tracked_box is None or size > previus_size:
                         previus_size = size
                         tracked_box = description
-                        new_id = ID                    
+                        new_id = ID          
 
             recognition.detections.append(description)
+            
+            
 
             cv.rectangle(debug_img,(int(X1),int(Y1)), (int(X2),int(Y2)),(0,0,255),thickness=2)
             cv.putText(debug_img,f"{box_label}{self.model.names[clss]}:{score:.2f}", (int(X1), int(Y1)), cv.FONT_HERSHEY_SIMPLEX,0.75,(0,0,255),thickness=2)
@@ -225,6 +244,25 @@ class YoloTrackerRecognition(BaseRecognition):
                             if kpt.score >= self.threshold:
                                 cv.circle(debug_img, (int(kpt.x), int(kpt.y)),3,(0,255,255),thickness=-1)
                     counter +=1
+        description : Detection2D
+        for description in recognition.detections:
+            #3D
+            data.boundingBox2D.center.position.x = description.bbox.center.position.x 
+            data.boundingBox2D.center.position.y = description.bbox.center.position.y
+            data.boundingBox2D.size_x = description.bbox.size_x
+            data.boundingBox2D.size_y = description.bbox.size_y
+            data.maxSize.x = 3.0
+            data.maxSize.y = 3.0
+            data.maxSize.z = 3.0
+
+            bbox3D = boundingBoxProcessing(data)
+            pose3D = []
+
+            if results[0].keypoints != None:
+                data.pose = [(kp.x, kp.y, kp.score, kp.id) for kp in description.pose]
+                pose3D = poseProcessing(data)
+
+            recognition3D.detections.append(self.createDetection3d(bbox3D,description.score,HEADER,description.label, description.id, description.global_id, pose=pose3D))
 
         track_recognition.detections.append(tracked_description)
         # debug_msg = ros_numpy.msgify(Image, debug_img, encoding='bgr8')
@@ -234,15 +272,112 @@ class YoloTrackerRecognition(BaseRecognition):
         
         if len(recognition.detections) > 0:
             self.recognitionPub.publish(recognition)
+        if len(recognition3D.detections) > 0:
+            self.recognition3DPub.publish(recognition3D)
+            self.publishMarkers(recognition3D.detections)
         if tracked_box != None and len(track_recognition.detections) > 0:
             self.trackingPub.publish(track_recognition)
 
+    def createDetection3d(self, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str, id : int = 0 , global_id : int=0, pose : list = []):
+        detection3d = Detection3D()
+        detection3d.header = detectionHeader
+        detection3d.id = id
+        detection3d.global_id = global_id
+        detection3d.label = label
+        detection3d.score = score
+        detection3d.bbox3d = bb3d
+
+        if len(pose) != 0:
+            for kpt in pose:
+                # print(kpt)
+                kpt3D = KeyPoint3D()
+                kpt3D.x = kpt[0]
+                kpt3D.y = kpt[1]
+                kpt3D.z = kpt[2]
+                kpt3D.score = kpt[3]
+                kpt3D.id = kpt[4]
+                detection3d.pose.append(kpt3D)
+
+        return detection3d
+    
+    def publishMarkers(self, descriptions3d : Detection3DArray , color=[255,0,0]):
+        markers = MarkerArray()
+        duration = Duration()
+        duration.sec = 2
+        color = np.asarray(color)/255.0
+        for i, det in enumerate(descriptions3d):
+            det.header.frame_id = "map"
+            name = det.label
+
+            # cube marker
+            marker = Marker()
+            marker.header = det.header
+            marker.action = Marker.ADD
+            marker.pose = det.bbox3d.center
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 0.4
+            marker.ns = "bboxes"
+            marker.id = i
+            marker.type = Marker.CUBE
+            marker.scale = det.bbox3d.size
+            marker.lifetime = duration
+            markers.markers.append(marker)
+
+            # text marker
+            marker = Marker()
+            marker.header = det.header
+            marker.action = Marker.ADD
+            marker.pose = det.bbox3d.center
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 1.0
+            marker.id = i
+            marker.ns = "texts"
+            marker.type = Marker.TEXT_VIEW_FACING
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            marker.text = '{} ({:.2f})'.format(name, det.score)
+            marker.lifetime = duration
+            markers.markers.append(marker)
+
+            for idx, kpt3D in enumerate(det.pose):
+                # print("oi")
+                if kpt3D.score > 0:
+                    marker = Marker()
+                    marker.header = det.header
+                    marker.type = Marker.SPHERE
+                    marker.id = idx
+                    marker.color.r = color[1]
+                    marker.color.g = color[2]
+                    marker.color.b = color[0]
+                    marker.color.a = 1.0
+                    marker.scale.x = 0.05
+                    marker.scale.y = 0.05
+                    marker.scale.z = 0.05
+                    marker.pose.position.x = kpt3D.x
+                    marker.pose.position.y = kpt3D.y
+                    marker.pose.position.z = kpt3D.z
+                    marker.pose.orientation.x = 0.0
+                    marker.pose.orientation.y = 0.0
+                    marker.pose.orientation.z = 0.0
+                    marker.pose.orientation.w = 1.0
+                    marker.lifetime = duration
+                    markers.markers.append(marker)
+        
+        self.markerPublisher.publish(markers)
+    
     def declareParameters(self):
         super().declareParameters()
         self.declare_parameter("publishers.debug.topic","/fbot_vision/br/debug")
         self.declare_parameter("publishers.pose_recognition.queue_size",1)
-        self.declare_parameter("publishers.recognition.topic", "/fbot_vision/br/recognition")
+        self.declare_parameter("publishers.recognition.topic", "/fbot_vision/br/recognition2D")
         self.declare_parameter("publishers.recognition.queue_size", 1)
+        self.declare_parameter("publishers.recognition3D.topic", "/fbot_vision/br/recognition3D")
+        self.declare_parameter("publishers.recognition3D.queue_size", 1)
 
         self.declare_parameter("services.tracking.start","/fbot_vision/pt/start")
         self.declare_parameter("services.tracking.stop","/fbot_vision/pt/stop")
@@ -281,6 +416,9 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.recognition_topic = self.get_parameter("publishers.recognition.topic").value
         self.recognition_qs = self.get_parameter("publishers.recognition.queue_size").value
+
+        self.recognition3D_topic = self.get_parameter("publishers.recognition3D.topic").value
+        self.recognition3D_qs = self.get_parameter("publishers.recognition3D.queue_size").value
 
         self.start_tracking_topic = self.get_parameter("services.tracking.start").value
         self.stop_tracking_topic = self.get_parameter("services.tracking.stop").value
