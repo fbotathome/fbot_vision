@@ -306,7 +306,7 @@ class YoloTrackerRecognition(BaseRecognition):
         duration.sec = 2
         color = np.asarray(color)/255.0
         for i, det in enumerate(descriptions3d):
-            det.header.frame_id = "map"
+            # det.header.frame_id = "map"
             name = det.label
 
             # cube marker
