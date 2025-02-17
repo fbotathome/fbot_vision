@@ -45,10 +45,9 @@ class YoloTrackerRecognition(BaseRecognition):
         self.debugPub = self.create_publisher(Image, self.debug_topic, qos_profile=1)
         self.recognitionPub = self.create_publisher(Detection2DArray, self.recognition_topic, qos_profile=self.recognition_qs)
         self.recognition3DPub = self.create_publisher(Detection3DArray, self.recognition3D_topic, qos_profile=self.recognition3D_qs)
-        self.trackingPub = self.create_publisher(Detection2DArray, self.tracking_topic, qos_profile=self.recognition_qs)
-        
-        self.markerPublisher = self.create_publisher(MarkerArray,'pub/markers',qos_profile=1)
-        
+        self.trackingPub = self.create_publisher(Detection2DArray, self.tracking_topic, qos_profile=self.tracking_qs)
+        self.tracking3DPub = self.create_publisher(Detection3DArray, self.tracking3D_topic, qos_profile=self.tracking3D_qs)
+        self.markerPublisher = self.create_publisher(MarkerArray,self.markers_topic,qos_profile=self.markers_qs)        
         self.trackingStartService = self.create_service(Empty, self.start_tracking_topic, self.startTracking)
         self.trackingStopService = self.create_service(Empty, self.stop_tracking_topic, self.stopTracking)
     
@@ -95,8 +94,6 @@ class YoloTrackerRecognition(BaseRecognition):
         self.get_logger().info("Tracking stoped!!!")
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
-        self.get_logger().warn("Message arrived")
-
         tracking = self.tracking
 
         img = imageMsg
@@ -244,16 +241,17 @@ class YoloTrackerRecognition(BaseRecognition):
                             if kpt.score >= self.threshold:
                                 cv.circle(debug_img, (int(kpt.x), int(kpt.y)),3,(0,255,255),thickness=-1)
                     counter +=1
+        
         description : Detection2D
+        track_recognition3D = Detection3DArray()
+        track_recognition3D.header = HEADER
         for description in recognition.detections:
             #3D
             data.boundingBox2D.center.position.x = description.bbox.center.position.x 
             data.boundingBox2D.center.position.y = description.bbox.center.position.y
             data.boundingBox2D.size_x = description.bbox.size_x
             data.boundingBox2D.size_y = description.bbox.size_y
-            data.maxSize.x = 3.0
-            data.maxSize.y = 3.0
-            data.maxSize.z = 3.0
+            data.maxSize.x, data.maxSize.y, data.maxSize.z = self.max_sizes
 
             bbox3D = boundingBoxProcessing(data)
             pose3D = []
@@ -261,8 +259,11 @@ class YoloTrackerRecognition(BaseRecognition):
             if results[0].keypoints != None:
                 data.pose = [(kp.x, kp.y, kp.score, kp.id) for kp in description.pose]
                 pose3D = poseProcessing(data)
-
-            recognition3D.detections.append(self.createDetection3d(bbox3D,description.score,HEADER,description.label, description.id, description.global_id, pose=pose3D))
+            description3D = self.createDetection3d(bbox3D,description.score,HEADER,description.label, description.id, description.global_id, pose=pose3D)
+            if tracked_description != None and description.global_id == tracked_description.global_id:
+                track_recognition3D.detections.append(description3D)
+            
+            recognition3D.detections.append(description3D)
 
         track_recognition.detections.append(tracked_description)
         # debug_msg = ros_numpy.msgify(Image, debug_img, encoding='bgr8')
@@ -277,8 +278,9 @@ class YoloTrackerRecognition(BaseRecognition):
             self.publishMarkers(recognition3D.detections)
         if tracked_box != None and len(track_recognition.detections) > 0:
             self.trackingPub.publish(track_recognition)
+            self.tracking3DPub.publish(track_recognition3D)
 
-    def createDetection3d(self, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str, id : int = 0 , global_id : int=0, pose : list = []):
+    def createDetection3d(self, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str, id : int = 0 , global_id : int=0, pose : list = []) -> Detection3D:
         detection3d = Detection3D()
         detection3d.header = detectionHeader
         detection3d.id = id
@@ -372,37 +374,46 @@ class YoloTrackerRecognition(BaseRecognition):
     
     def declareParameters(self):
         super().declareParameters()
-        self.declare_parameter("publishers.debug.topic","/fbot_vision/br/debug")
-        self.declare_parameter("publishers.pose_recognition.queue_size",1)
-        self.declare_parameter("publishers.recognition.topic", "/fbot_vision/br/recognition2D")
-        self.declare_parameter("publishers.recognition.queue_size", 1)
-        self.declare_parameter("publishers.recognition3D.topic", "/fbot_vision/br/recognition3D")
-        self.declare_parameter("publishers.recognition3D.queue_size", 1)
+        self.declare_parameter("publishers.debug.topic","/fbot_vision/fr/debug")
 
-        self.declare_parameter("services.tracking.start","/fbot_vision/pt/start")
-        self.declare_parameter("services.tracking.stop","/fbot_vision/pt/stop")
+        self.declare_parameter("publishers.recognition.topic", "/fbot_vision/fr/recognition2D")
+        self.declare_parameter("publishers.recognition.queue_size", 1)
+        
+        self.declare_parameter("publishers.recognition3D.topic", "/fbot_vision/fr/recognition3D")
+        self.declare_parameter("publishers.recognition3D.queue_size", 1)
         
         self.declare_parameter("publishers.tracking.topic", "/fbot_vision/pt/tracking2D")
         self.declare_parameter("publishers.tracking.queue_size", 1)
 
+        self.declare_parameter("publishers.tracking3D.topic", "/fbot_vision/pt/tracking3D")
+        self.declare_parameter("publishers.tracking3D.queue_size", 1)
+
+        self.declare_parameter("publishers.markers.topic", "/fbot_vision/fr/markers")
+        self.declare_parameter("publishers.markers.queue_size", 1)
+
+        self.declare_parameter("services.tracking.start","/fbot_vision/pt/start")
+        self.declare_parameter("services.tracking.stop","/fbot_vision/pt/stop")
+
         self.declare_parameter("debug_kpt_threshold", 0.5)
 
         self.declare_parameter("model_file","yolo11n-pose")
-        self.declare_parameter("tracking.model_file","resnet_reid_model.pt")
-        self.declare_parameter("tracking.model_name","resnet50")
+        self.declare_parameter("tracking.reid.model_file","resnet_reid_model.pt")
+        self.declare_parameter("tracking.reid.model_name","resnet50")
 
-        self.declare_parameter("tracking.thresholds.det_threshold", 0.5)
-        self.declare_parameter("tracking.thresholds.reid_threshold", 0.75)
-        self.declare_parameter("tracking.thresholods.reid_threshold_feature_add",0.7)
-        self.declare_parameter('tracking.thresholds.iou_threshold',0.5)
+        self.declare_parameter("tracking.thresholds.detection", 0.5)
+        self.declare_parameter("tracking.thresholds.reid", 0.75)
+        self.declare_parameter("tracking.thresholds.reid_feature_add",0.7)
+        self.declare_parameter('tracking.thresholds.iou',0.5)
         self.declare_parameter("tracking.thresholds.max_time",60)
         self.declare_parameter("tracking.thresholds.max_age",5)
         self.declare_parameter("tracking.start_on_init", False)
 
-        self.declare_parameter("tracking.reid_img_size.height",256)
-        self.declare_parameter("tracking.reid_img_size.width",128)
+        self.declare_parameter("tracking.reid.img_size.height",256)
+        self.declare_parameter("tracking.reid.img_size.width",128)
 
-        self.declare_parameter("tracker-file","yolo_tracker_default_config.yaml")
+        self.declare_parameter("tracking.config_file","yolo_tracker_default_config.yaml")
+
+        self.declare_parameter("max_sizes", [2.5, 2.5, 2.5])
 
         # self.declare_parameter("tracking.model_name",128)
 
@@ -411,8 +422,6 @@ class YoloTrackerRecognition(BaseRecognition):
     def readParameters(self):
         super().readParameters()
         self.debug_topic = self.get_parameter("publishers.debug.topic").value
-        # print(f"VALOR: {self.debug_topic}")
-        self.debug_qs = self.get_parameter("publishers.pose_recognition.queue_size").value
 
         self.recognition_topic = self.get_parameter("publishers.recognition.topic").value
         self.recognition_qs = self.get_parameter("publishers.recognition.queue_size").value
@@ -426,25 +435,32 @@ class YoloTrackerRecognition(BaseRecognition):
         self.tracking_topic = self.get_parameter("publishers.tracking.topic").value
         self.tracking_qs = self.get_parameter("publishers.tracking.queue_size").value
 
+        self.tracking3D_topic = self.get_parameter("publishers.tracking3D.topic").value
+        self.tracking3D_qs = self.get_parameter("publishers.tracking3D.queue_size").value
+
+        self.markers_topic = self.get_parameter("publishers.markers.topic").value
+        self.markers_qs = self.get_parameter("publishers.markers.queue_size").value
+
         self.threshold = self.get_parameter("debug_kpt_threshold").value
 
         share_directory = get_package_share_directory("fbot_recognition")
 
         self.model_file = share_directory + "/weights/" + self.get_parameter("model_file").value
-        self.reid_model_file = share_directory + "/weights/" + self.get_parameter("tracking.model_file").value
-        self.reid_model_name = self.get_parameter("tracking.model_name").value
+        self.reid_model_file = share_directory + "/weights/" + self.get_parameter("tracking.reid.model_file").value
+        self.reid_model_name = self.get_parameter("tracking.reid.model_name").value
 
-        self.det_threshold = self.get_parameter("tracking.thresholds.det_threshold").value
-        self.reid_threshold = self.get_parameter("tracking.thresholds.reid_threshold").value
-        self.reid_add_feature_threshold = self.get_parameter("tracking.thresholods.reid_threshold_feature_add").value
-        self.iou_threshold = self.get_parameter('tracking.thresholds.iou_threshold').value
+        self.det_threshold = self.get_parameter("tracking.thresholds.detection").value
+        self.reid_threshold = self.get_parameter("tracking.thresholds.reid").value
+        self.reid_add_feature_threshold = self.get_parameter("tracking.thresholds.reid_feature_add").value
+        self.iou_threshold = self.get_parameter('tracking.thresholds.iou').value
         self.max_time = self.get_parameter("tracking.thresholds.max_time").value
         self.max_age = self.get_parameter("tracking.thresholds.max_age").value
         self.tracking_on_init = self.get_parameter("tracking.start_on_init").value
-        self.tracker_cfg_file = share_directory + "/config/yolo_tracker_config/" + self.get_parameter("tracker-file").value
+        self.tracker_cfg_file = share_directory + "/config/yolo_tracker_config/" + self.get_parameter("tracking.config_file").value
 
-        self.reid_img_size = (self.get_parameter("tracking.reid_img_size.height").value,self.get_parameter("tracking.reid_img_size.width").value)
-    
+        self.reid_img_size = (self.get_parameter("tracking.reid.img_size.height").value,self.get_parameter("tracking.reid.img_size.width").value)
+
+        self.max_sizes = self.get_parameter("max_sizes").value
 
     
 
