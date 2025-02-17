@@ -84,7 +84,7 @@ class YoloV8Recognition(BaseRecognition):
                 
                 label = results[0].names[classId]
                 score = float(box.conf)
-                
+
                 bb2d = BoundingBox2D()
                 data = BoundingBoxProcessingData()
                 data.sensor.setSensorData(cameraInfoMsg, depthMsg)
@@ -232,7 +232,11 @@ class YoloV8Recognition(BaseRecognition):
         self.peopleDetectionTopic = self.get_parameter("publishers.people_detection.topic").value
         self.peopleDetectionQosProfile = self.get_parameter("publishers.people_detection.qos_profile").value
         self.threshold = self.get_parameter("threshold").value
-        self.classesByCategory = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
+        self.get_logger().info(f"Threshold: {self.threshold}")
+        try:
+            self.classesByCategory = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
+        except Exception as e:
+            self.get_logger().error(f"classes_by_category parameter could not be turned into a dictionary: {e}")
         self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
         self.maxSizes = self.get_parameter("max_sizes").value
         super().readParameters()

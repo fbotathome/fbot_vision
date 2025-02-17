@@ -56,11 +56,13 @@ class BaseRecognition(Node):
     def declareParameters(self):
         for source in SOURCES_TYPES:
             self.declare_parameter(f'subscribers.{source}', DEFAULT_TOPICS[source])
+        self.declare_parameter('subscribers.slop', 0.1)
+        self.declare_parameter('subscribers.qos_profile', 1)
 
 
     def readParameters(self):
         for source in SOURCES_TYPES:
             self.topicsToSubscribe[source] = self.get_parameter(f'subscribers.{source}').value 
-        self.slop = self.topicsToSubscribe.pop('slop', 0.1)
-        self.qosProfile = self.topicsToSubscribe.pop('qos_profile', 1)
+        self.slop = self.get_parameter('subscribers.slop').value
+        self.qosProfile = self.get_parameter('subscribers.qos_profile').value
     
