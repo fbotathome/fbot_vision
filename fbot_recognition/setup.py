@@ -13,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name), glob.glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob.glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config/yolo_tracker_config'), glob.glob('config/yolo_tracker_config/*.yaml')),
         (os.path.join('share', package_name, 'weights'), glob.glob('weights/*')),
     ],
     install_requires=['setuptools'],
@@ -25,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'yolov8_recognition = fbot_recognition.yolov8_recognition.yolov8_recognition:main',
+            'yolo_tracker_recognition = fbot_recognition.yolo_tracker_recognition.yolo_tracker_recognition:main',
             'face_recognition = fbot_recognition.face_recognition.face_recognition:main',
         ],
     },

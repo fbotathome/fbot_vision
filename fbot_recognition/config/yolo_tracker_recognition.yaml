@@ -1,0 +1,68 @@
+yolo_tracker_recognition:
+  ros__parameters:
+  
+    model_file: yolo11n-pose.pt
+    debug_kpt_threshold: 0.5
+
+    max_sizes:
+        - [2.5, 2.5, 2.5] #trocar no codigo
+
+
+    subscribers:
+      
+      slop: 0.2
+      qos_profile: 1
+
+      image_rgb: /fbot_vision/bvb/image_rgb
+      camera_info: /fbot_vision/bvb/camera_info
+      image_depth: /fbot_vision/bvb/image_depth
+
+    services:
+    
+      tracking:
+        start: /fbot_vision/pt/start
+        stop: /fbot_vision/pt/stop
+
+    publishers:
+
+      debug:
+        topic: /fbot_vision/fr/debug
+        queue_size: 1
+
+      recognition:
+        topic: /fbot_vision/fr/recognition2D
+        queue_size: 1
+      
+      recognition3D:
+        topic: /fbot_vision/fr/recognition3D
+        queue_size: 1
+      
+      tracking:
+        topic: /fbot_vision/pt/tracking2D
+        queue_size: 1
+      
+      tracking3D:
+        topic: /fbot_vision/pt/tracking3D
+        queue_size: 1
+      
+      markers:
+        topic: /fbot_vision/fr/markers
+        queue_size: 1
+
+    tracking:
+      start_on_init: False
+      
+      reid:
+        model_file: resnet_reid_model.pt
+        model_name: resnet50
+        img_size:
+          height: 256
+          width: 128
+
+      thresholds:
+        detection: 0.5
+        reid: 0.75
+        reid_feature_add: 0.7
+        iou: 0.5
+        max_time: 60
+        nax_age: 5

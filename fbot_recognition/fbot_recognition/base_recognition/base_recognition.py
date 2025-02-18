@@ -14,6 +14,12 @@ SOURCES_TYPES = {
         'image_rgb': Image,
         'image_depth': Image
     }
+
+DEFAULT_TOPICS = {
+    'camera_info' : "/fbot_vision/bvb/camera_info",
+    'image_rgb' : "/fbot_vision/bvb/image_rgb",
+    'image_depth': "/fbot_vision/bvb/image_depth",
+}
 class BaseRecognition(Node):
     def __init__(self, packageName='fbot_recognition', nodeName='base_recognition'):
         super().__init__(nodeName)
@@ -32,24 +38,24 @@ class BaseRecognition(Node):
         for source in SOURCES_TYPES:
             if source in self.topicsToSubscribe:
                 subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.topicsToSubscribe[source], qos_profile=self.qosProfile))
-        self._synchronizer = message_filters.ApproximateTimeSynchronizer([x for x in subscribers],queue_size=1, slop=self.slop)
+        self._synchronizer = message_filters.ApproximateTimeSynchronizer(subscribers,queue_size=1, slop=self.slop)
         self._synchronizer.registerCallback(callbackObject)
 
     def loadCVBrige(self):
         self.cvBridge = CvBridge()
 
     def loadModel(self):
-        raise NotImplementedError("loadModel method not implemented in BaseRecognition class")
+        raise NotImplementedError("loadModel must be implemented on recognition node class")
 
-    def unloadModel(self):
-        raise NotImplementedError("unloadModel method not implemented in BaseRecognition class")
+    def unLoadModel(self):
+        raise NotImplementedError("unloadModel must be implemented on recognition node class")
 
     def callback(self, *args):
-        raise NotImplementedError("callback method not implemented in BaseRecognition class")
+        raise NotImplementedError("callback must be implemented on recognition node class")
 
     def declareParameters(self):
         for source in SOURCES_TYPES:
-            self.declare_parameter(f'subscribers.{source}', "")
+            self.declare_parameter(f'subscribers.{source}', DEFAULT_TOPICS[source])
         self.declare_parameter('subscribers.slop', 0.1)
         self.declare_parameter('subscribers.qos_profile', 1)
 
