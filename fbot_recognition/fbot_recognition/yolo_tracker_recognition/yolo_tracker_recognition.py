@@ -252,8 +252,11 @@ class YoloTrackerRecognition(BaseRecognition):
             data.boundingBox2D.size_x = description.bbox.size_x
             data.boundingBox2D.size_y = description.bbox.size_y
             data.maxSize.x, data.maxSize.y, data.maxSize.z = self.max_sizes
-
-            bbox3D = boundingBoxProcessing(data)
+            try:
+                bbox3D = boundingBoxProcessing(data)
+            except Exception as e:
+                self.get_logger().warn(e)
+                continue
             pose3D = []
 
             if results[0].keypoints != None:
