@@ -1,1 +1,1 @@
-from .face_recognition import *
+from .face_recognition import FaceRecognition
