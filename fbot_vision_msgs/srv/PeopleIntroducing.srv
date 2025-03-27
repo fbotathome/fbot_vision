@@ -1,0 +1,5 @@
+string name
+int32 num_images
+float64 interval
+---
+bool response
