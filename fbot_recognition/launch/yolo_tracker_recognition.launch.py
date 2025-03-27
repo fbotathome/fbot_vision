@@ -10,7 +10,7 @@ def generate_launch_description():
     config_file_path = os.path.join(
         get_package_share_directory('fbot_recognition'),
         'config',
-        'yolov8_object_recognition.yaml'
+        'yolo_tracker_recognition.yaml'
     )
 
     config_file_arg = DeclareLaunchArgument(
@@ -19,14 +19,14 @@ def generate_launch_description():
         description='Path to the parameter file'
     )
 
-    yolov8_recog_node = Node(
+    yolo_tracker_node = Node(
         package='fbot_recognition',
-        executable='yolov8_recognition',
-        name='yolov8_recognition',
+        executable='yolo_tracker_recognition',
+        name='yolo_tracker_recognition',
         parameters=[LaunchConfiguration('config')]
     )
 
     return LaunchDescription([
         config_file_arg,
-        yolov8_recog_node
+        yolo_tracker_node
     ])

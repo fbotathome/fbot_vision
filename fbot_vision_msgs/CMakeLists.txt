@@ -11,8 +11,10 @@ find_package(vision_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/Keypoint2D.msg"
-  "msg/Keypoint3D.msg"  
+  "msg/KeyPoint2D.msg"
+  "msg/KeyPoint3D.msg"
+  "msg/Detection2D.msg"
+  "msg/Detection2DArray.msg"
   "msg/Detection3D.msg"
   "msg/Detection3DArray.msg"
   "srv/PeopleIntroducing.srv"
