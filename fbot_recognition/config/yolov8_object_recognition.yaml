@@ -12,7 +12,7 @@ yolov8_recognition:
     max_sizes:
         - [0.5, 0.5, 0.5]
 
-    model_file: larc_2024_best.pt
+    # model_file: yolo11.pt
 
     subscribers:
       

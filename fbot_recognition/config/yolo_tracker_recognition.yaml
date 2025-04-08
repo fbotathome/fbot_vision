@@ -10,7 +10,7 @@ yolo_tracker_recognition:
 
     subscribers:
       
-      slop: 0.2
+      slop: 0.5
       qos_profile: 1
 
       image_rgb: /fbot_vision/bvb/image_rgb

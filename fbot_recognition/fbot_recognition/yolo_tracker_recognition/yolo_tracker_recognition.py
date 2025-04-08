@@ -105,6 +105,7 @@ class YoloTrackerRecognition(BaseRecognition):
         recognition.image_rgb = img
 
         recognition3D = Detection3DArray()
+        recognition3D.image_rgb = img
         data = BoundingBoxProcessingData()
         data.sensor.setSensorData(camera_info, img_depth)
 
@@ -113,7 +114,8 @@ class YoloTrackerRecognition(BaseRecognition):
         # recognition.camera_info = camera_info
         recognition.header = HEADER
         recognition.detections = []
-        img = self.cv_bridge.imgmsg_to_cv2(img, "bgr8")
+        # self.get_logger().error(type(img))
+        img = self.cv_bridge.imgmsg_to_cv2(img)
 
         debug_img = deepcopy(img)
         debug_img = cv.cvtColor(debug_img, cv.COLOR_BGR2RGB)
@@ -156,8 +158,8 @@ class YoloTrackerRecognition(BaseRecognition):
             score = box[-2]
             clss = int(box[-1])
 
-            description.bbox.center.position.x = (X1+X2)/2
-            description.bbox.center.position.y = (Y1+Y2)/2
+            description.bbox.center.position.x = float(X1+X2)/2.0
+            description.bbox.center.position.y = float(Y1+Y2)/2.0
             description.bbox.size_x = float(X2-X1)
             description.bbox.size_y = float(Y2-Y1)
             description.label = self.model.names[clss]
@@ -245,6 +247,7 @@ class YoloTrackerRecognition(BaseRecognition):
         description : Detection2D
         track_recognition3D = Detection3DArray()
         track_recognition3D.header = HEADER
+        track_recognition3D.image_rgb = recognition.image_rgb
         for description in recognition.detections:
             #3D
             data.boundingBox2D.center.position.x = description.bbox.center.position.x 
