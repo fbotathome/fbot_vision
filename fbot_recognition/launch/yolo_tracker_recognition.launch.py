@@ -4,6 +4,7 @@ from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
+from launch_remote_ssh import NodeRemoteSSH
 import os
 
 def generate_launch_description():
@@ -19,11 +20,16 @@ def generate_launch_description():
         description='Path to the parameter file'
     )
 
-    yolo_tracker_node = Node(
+    yolo_tracker_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
         name='yolo_tracker_recognition',
-        parameters=[LaunchConfiguration('config')]
+        parameters=[LaunchConfiguration('config'),],
+        user='jetson',
+        machine="jetson"
+        source_paths=[
+            "/home/jetson/jetson_ws/install/setup.bash",
+        ]
     )
 
     return LaunchDescription([
