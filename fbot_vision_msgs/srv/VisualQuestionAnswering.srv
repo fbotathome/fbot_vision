@@ -1,0 +1,4 @@
+string question
+---
+string answer
+float64 confidence
