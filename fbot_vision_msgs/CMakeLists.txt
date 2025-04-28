@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Detection3DArray.msg"
   "srv/PeopleIntroducing.srv"
   "srv/LookAtDescription3D.srv"
+  "srv/VisualQuestionAnswering.srv"
   DEPENDENCIES std_msgs geometry_msgs sensor_msgs vision_msgs
 )
 
