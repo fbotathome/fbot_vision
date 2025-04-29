@@ -1,13 +1,15 @@
 vision_language_model:
     ros__parameters:
-        vlm_api_type: google-genai #Must be one of: ['openai', 'ollama', 'google-genai']
+        vlm_api_type: openai #Must be one of: ['openai', 'ollama', 'google-genai']
         vlm_api_host: dummy #Must be set for openai and ollama, but is not used for google-genai
         vlm_api_model: gemini-1.5-flash
 
+        vlm_api_key: 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
+
         subscribers:
             image_rgb:
-                topic: /butia_vision/bvb/image_rgb
+                topic: /camera/camera/color/image_raw
 
         servers:
             visual_question_answering:
-                service: /butia_vision/bvlm/visual_question_answering/query
+                service: /fbot_vision/bvlm/visual_question_answering/query

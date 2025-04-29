@@ -23,7 +23,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vision_language_model = fbot_head.vision_language_model:main',
+            'vision_language_model = fbot_vision_language_model.vision_language_model.vision_language_model:main',
         ],
     },
 )

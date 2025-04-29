@@ -36,16 +36,18 @@ class VisionLanguageModel(Node):
         
         self.bridge = CvBridge()
 
+        self.load_params(filename='vision_language_model.yaml')
         self.read_parameters()
 
         if self.vlm_api_type == 'ollama':
             self.vlm = ChatOllama(model=self.vlm_api_model, base_url=self.vlm_api_host)
         elif self.vlm_api_type == 'openai':
-            self.vlm = ChatOpenAI(model_name=self.vlm_api_model, openai_api_base=self.vlm_api_host)
-        if self.vlm_api_type == 'google-genai':
+            self.vlm = ChatOpenAI(model_name=self.vlm_api_model, openai_api_base=self.vlm_api_host, api_key=self.vlm_api_key)
+        elif self.vlm_api_type == 'google-genai':
             self.vlm = ChatGoogleGenerativeAI(model=self.vlm_api_model, convert_system_message_to_human=True)
         else:
             raise ValueError(f"VLM API type must be one of: {['ollama', 'openai', 'google-genai']}!")
+        print('vlm = ', self.vlm)
         self.image_rgb_subscriber = self.create_subscription(Image, self.rgb_image_topic, self._update_rgb_image, 10)
         self.visual_question_answering_server = self.create_service(VisualQuestionAnswering, self.visual_question_answering_service, self._handle_visual_question_answering)
 
@@ -89,14 +91,15 @@ class VisionLanguageModel(Node):
             }
 
     def read_parameters(self):
-        self.vlm_api_type = self.get_parameter('vlm_api_type')
-        self.vlm_api_host = self.get_parameter('vlm_api_host')
-        self.vlm_api_model = self.get_parameter('vlm_api_model')
-        self.rgb_image_topic = self.get_parameter('subscribers/image_rgb/topic')
-        self.visual_question_answering_service = self.get_parameter('servers/visual_question_answering/service')
+        self.vlm_api_type = self.get_parameter('vlm_api_type').value
+        self.vlm_api_host = self.get_parameter('vlm_api_host').value
+        self.vlm_api_model = self.get_parameter('vlm_api_model').value
+        self.vlm_api_key = self.get_parameter('vlm_api_key').value
+        self.rgb_image_topic = self.get_parameter('subscribers/image_rgb/topic').value
+        self.visual_question_answering_service = self.get_parameter('servers/visual_question_answering/service').value
     
     def load_params(self, filename):
-        with open(os.path.join(get_package_share_directory('fbot_vision_bringup'), 'config', filename)) as config_file:
+        with open(os.path.join(get_package_share_directory('fbot_vision_language_model'), 'config', filename)) as config_file:
             config = yaml.safe_load(config_file)[self.get_name()]['ros__parameters']
 
         self.declare_parameters_from_dict(config)
