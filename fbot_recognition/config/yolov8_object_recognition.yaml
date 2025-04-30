@@ -3,7 +3,7 @@ yolov8_recognition:
 
     threshold: 0.6
 
-    classes_by_category: '{"Drinks": ["Banana", "Coke", "Fanta", "Kuat", "Papaya", "Pithula"], 
+    classes_by_category: '{"Drinks": ["person", "Coke", "Fanta", "Kuat", "Papaya", "Pithula"], 
                           "Cleaning supplies": ["Cloth", "Soap", "SteelWool"], 
                           "Pantry items": ["ToothPick", "Cappuccino", "Gelatin", "MilkCream", "TomatoSauce"], 
                           "Fruits": ["Apple", "Kiwi", "Lemon", "Sicilian_Lemon"], 
@@ -19,9 +19,9 @@ yolov8_recognition:
       slop: 0.2
       qos_profile: 1
 
-      image_rgb: /camera/camera/color/image_raw
-      camera_info: /camera/camera/color/camera_info
-      image_depth: /camera/camera/aligned_depth_to_color/image_raw
+      image_rgb: /cam1/color/image_raw
+      camera_info: /cam1/aligned_depth_to_color/camera_info
+      image_depth: /cam1/aligned_depth_to_color/image_raw
       
     publishers:
 
