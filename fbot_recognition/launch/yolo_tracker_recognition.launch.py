@@ -61,7 +61,7 @@ def generate_launch_description():
         machine="jetson",
         source_paths=[
             "/home/jetson/jetson_ws/install/setup.bash",
-        ]
+        ],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
