@@ -382,19 +382,19 @@ class YoloTrackerRecognition(BaseRecognition):
         self.declare_parameter("publishers.debug.topic","/fbot_vision/fr/debug")
 
         self.declare_parameter("publishers.recognition.topic", "/fbot_vision/fr/recognition2D")
-        self.declare_parameter("publishers.recognition.queue_size", 1)
+        self.declare_parameter("publishers.recognition.qos_profile", 10)
         
         self.declare_parameter("publishers.recognition3D.topic", "/fbot_vision/fr/recognition3D")
-        self.declare_parameter("publishers.recognition3D.queue_size", 1)
+        self.declare_parameter("publishers.recognition3D.qos_profile", 10)
         
         self.declare_parameter("publishers.tracking.topic", "/fbot_vision/pt/tracking2D")
-        self.declare_parameter("publishers.tracking.queue_size", 1)
+        self.declare_parameter("publishers.tracking.qos_profile", 10)
 
         self.declare_parameter("publishers.tracking3D.topic", "/fbot_vision/pt/tracking3D")
-        self.declare_parameter("publishers.tracking3D.queue_size", 1)
+        self.declare_parameter("publishers.tracking3D.qos_profile", 10)
 
         self.declare_parameter("publishers.markers.topic", "/fbot_vision/fr/markers")
-        self.declare_parameter("publishers.markers.queue_size", 1)
+        self.declare_parameter("publishers.markers.qos_profile", 10)
 
         self.declare_parameter("services.tracking.start","/fbot_vision/pt/start")
         self.declare_parameter("services.tracking.stop","/fbot_vision/pt/stop")
@@ -429,22 +429,22 @@ class YoloTrackerRecognition(BaseRecognition):
         self.debug_topic = self.get_parameter("publishers.debug.topic").value
 
         self.recognition_topic = self.get_parameter("publishers.recognition.topic").value
-        self.recognition_qs = self.get_parameter("publishers.recognition.queue_size").value
+        self.recognition_qs = self.get_parameter("publishers.recognition.qos_profile").value
 
         self.recognition3D_topic = self.get_parameter("publishers.recognition3D.topic").value
-        self.recognition3D_qs = self.get_parameter("publishers.recognition3D.queue_size").value
+        self.recognition3D_qs = self.get_parameter("publishers.recognition3D.qos_profile").value
 
         self.start_tracking_topic = self.get_parameter("services.tracking.start").value
         self.stop_tracking_topic = self.get_parameter("services.tracking.stop").value
         
         self.tracking_topic = self.get_parameter("publishers.tracking.topic").value
-        self.tracking_qs = self.get_parameter("publishers.tracking.queue_size").value
+        self.tracking_qs = self.get_parameter("publishers.tracking.qos_profile").value
 
         self.tracking3D_topic = self.get_parameter("publishers.tracking3D.topic").value
-        self.tracking3D_qs = self.get_parameter("publishers.tracking3D.queue_size").value
+        self.tracking3D_qs = self.get_parameter("publishers.tracking3D.qos_profile").value
 
         self.markers_topic = self.get_parameter("publishers.markers.topic").value
-        self.markers_qs = self.get_parameter("publishers.markers.queue_size").value
+        self.markers_qs = self.get_parameter("publishers.markers.qos_profile").value
 
         self.threshold = self.get_parameter("debug_kpt_threshold").value
 
