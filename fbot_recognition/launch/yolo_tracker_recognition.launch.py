@@ -57,11 +57,6 @@ def generate_launch_description():
         executable='yolo_tracker_recognition',
         name='yolo_tracker_recognition',
         parameters=[LaunchConfiguration('config'),],
-        user='jetson',
-        machine="jetson",
-        source_paths=[
-            "/home/jetson/jetson_ws/install/setup.bash",
-        ]
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
