@@ -4,8 +4,11 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 from launch_remote_ssh import NodeRemoteSSH, FindPackageShareRemote
+from launch_ros.substitutions import FindPackageShare
 import os
 
 def generate_launch_description():
@@ -39,6 +42,12 @@ def generate_launch_description():
         description="If should run the node on remote"
     )
 
+    launch_camera_arg = DeclareLaunchArgument(
+        'launch_camera',
+        default_value='false',
+        description="If should launch the camera node"
+    )
+
     yolo_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='yolov8_recognition',
@@ -60,10 +69,28 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
+
+    realsense2_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+        ),
+        launch_arguments={
+            'enable_rgbd': 'true',
+            'enable_sync': 'true',
+            'align_depth.enable': 'true',
+            'enable_color': 'true',
+            'enable_depth': 'true',
+            'pointcloud.enable': 'true'
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('launch_camera'))
+    )
+
     return LaunchDescription([
         config_file_arg,
         config_file_remote_arg,
         config_remote_arg,
+        launch_camera_arg,
         yolo_object_remote_node,
-        yolo_object_node
+        yolo_object_node,
+        realsense2_node
     ])
