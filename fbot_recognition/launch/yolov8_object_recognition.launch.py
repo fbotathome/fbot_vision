@@ -42,8 +42,8 @@ def generate_launch_description():
         description="If should run the node on remote"
     )
 
-    launch_camera_arg = DeclareLaunchArgument(
-        'launch_camera',
+    launch_realsense_arg = DeclareLaunchArgument(
+        'launch_realsense',
         default_value='false',
         description="If should launch the camera node"
     )
@@ -82,14 +82,14 @@ def generate_launch_description():
             'enable_depth': 'true',
             'pointcloud.enable': 'true'
         }.items(),
-        condition=IfCondition(LaunchConfiguration('launch_camera'))
+        condition=IfCondition(LaunchConfiguration('launch_realsense'))
     )
 
     return LaunchDescription([
         config_file_arg,
         config_file_remote_arg,
         config_remote_arg,
-        launch_camera_arg,
+        launch_realsense_arg,
         yolo_object_remote_node,
         yolo_object_node,
         realsense2_node
