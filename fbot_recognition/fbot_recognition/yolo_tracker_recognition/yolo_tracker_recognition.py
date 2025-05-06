@@ -257,7 +257,7 @@ class YoloTrackerRecognition(BaseRecognition):
             try:
                 bbox3D = boundingBoxProcessing(data)
             except Exception as e:
-                self.get_logger().warn(e)
+                self.get_logger().warn(str(e))
                 continue
             pose3D = []
 
