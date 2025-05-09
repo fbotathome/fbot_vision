@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import rclpy
-from PIL import Image as IMG
-from image2world.image2worldlib import *
-from fbot_recognition import BaseRecognition
+import copy
 import numpy as np
 import torch
 import ast
+
 from ultralytics import YOLO
+from PIL import Image as IMG
+from image2world.image2worldlib import *
+from fbot_recognition import BaseRecognition
 
 from std_msgs.msg import Header
 from builtin_interfaces.msg import Duration
@@ -53,7 +55,6 @@ class YoloV8Recognition(BaseRecognition):
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
 
         self.get_logger().info("=> Entering callback ")
-
         allClasses = [cls for sublist in self.classesByCategory.values() for cls in sublist]
         allClassesLen = len(allClasses)
 
@@ -113,7 +114,6 @@ class YoloV8Recognition(BaseRecognition):
             
                 ######PARA FILTRAR OQ ESTA DENTRO DA CASA
                 #if i2w.inPolygonFilter(bbox3d):
-        
         self.objectRecognitionPublisher.publish(detection3DArray)
 
         imageArray = results[0].plot()
@@ -137,7 +137,7 @@ class YoloV8Recognition(BaseRecognition):
             self.get_logger().error(f"Label {label} not found in classesByCategory")
             return None
 
-        detection3d.bbox2d = bb2d
+        detection3d.bbox2d = copy.deepcopy(bb2d)
         detection3d.bbox3d = bb3d
 
         return detection3d
