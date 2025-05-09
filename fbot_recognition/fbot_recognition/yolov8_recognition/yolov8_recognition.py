@@ -110,9 +110,6 @@ class YoloV8Recognition(BaseRecognition):
                 detection3d = self.createDetection3d(bb2d, bb3d, score, detectionHeader, label)
                 if detection3d is not None:
                     detection3DArray.detections.append(detection3d)
-            
-                ######PARA FILTRAR OQ ESTA DENTRO DA CASA
-                #if i2w.inPolygonFilter(bbox3d):
         
         self.objectRecognitionPublisher.publish(detection3DArray)
 
