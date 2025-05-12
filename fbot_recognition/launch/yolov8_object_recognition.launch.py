@@ -24,29 +24,31 @@ def generate_launch_description():
         'yolov8_object_recognition.yaml']
     )
 
-    config_file_arg = DeclareLaunchArgument(
-        'config',
-        default_value=config_file_path,
-        description='Path to the parameter file'
-    )
-
-    config_file_remote_arg = DeclareLaunchArgument(
-        'remote_config',
-        default_value=config_file_path_remote,
-        description='Path to the parameter file'
-    )
-
-    config_remote_arg = DeclareLaunchArgument(
-        'use_remote',
-        default_value='true',
-        description="If should run the node on remote"
-    )
-
-    use_realsense_arg = DeclareLaunchArgument(
-        'use_realsense',
-        default_value='false',
-        description="If should launch the camera node"
-    )
+    declared_arguments = []
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'config',
+            default_value=config_file_path,
+            description='Path to the parameter file'
+        ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'remote_config',
+            default_value=config_file_path_remote,
+            description='Path to the remote parameter file'
+        ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_remote',
+            default_value='true',
+            description="If it should run the node on remote"
+        ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_realsense',
+            default_value='false',
+            description="If it should run the realsense node"
+        ))
 
     yolo_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
@@ -86,10 +88,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        config_file_arg,
-        config_file_remote_arg,
-        config_remote_arg,
-        use_realsense_arg,
+        *declared_arguments,
         yolo_object_remote_node,
         yolo_object_node,
         realsense2_node
