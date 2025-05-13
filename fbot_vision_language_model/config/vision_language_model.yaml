@@ -4,8 +4,6 @@ vision_language_model:
         vlm_api_host: dummy #Must be set for openai and ollama, but is not used for google-genai
         vlm_api_model: gemini-1.5-flash
 
-        vlm_api_key: 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
-
         subscribers:
             image_rgb:
                 topic: /camera/camera/color/image_raw

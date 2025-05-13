@@ -16,6 +16,9 @@ import base64
 from io import BytesIO
 from langchain_core.messages import HumanMessage
 
+from dotenv import load_dotenv
+import os
+
 try:
     from langchain_community.chat_models.ollama import ChatOllama
 except:
@@ -91,10 +94,11 @@ class VisionLanguageModel(Node):
             }
 
     def read_parameters(self):
+        load_dotenv()
         self.vlm_api_type = self.get_parameter('vlm_api_type').value
         self.vlm_api_host = self.get_parameter('vlm_api_host').value
         self.vlm_api_model = self.get_parameter('vlm_api_model').value
-        self.vlm_api_key = self.get_parameter('vlm_api_key').value
+        self.vlm_api_key = os.getenv('VLM_API_KEY')
         self.rgb_image_topic = self.get_parameter('subscribers/image_rgb/topic').value
         self.visual_question_answering_service = self.get_parameter('servers/visual_question_answering/service').value
     
