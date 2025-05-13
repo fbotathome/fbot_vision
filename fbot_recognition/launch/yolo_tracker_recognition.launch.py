@@ -41,7 +41,7 @@ def generate_launch_description():
     )
 
     launch_realsense_arg = DeclareLaunchArgument(
-        'launch_realsense',
+        'use_realsense',
         default_value='true',
         description="If should launch the camera node"
     )
@@ -80,7 +80,7 @@ def generate_launch_description():
             'enable_depth': 'true',
             'pointcloud.enable': 'true'
         }.items(),
-        condition=IfCondition(LaunchConfiguration('launch_realsense')))
+        condition=IfCondition(LaunchConfiguration('use_realsense')))
 
     return LaunchDescription([
         config_file_arg,
