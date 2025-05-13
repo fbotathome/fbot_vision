@@ -1,12 +1,12 @@
 vision_language_model:
     ros__parameters:
         vlm_api_type: openai #Must be one of: ['openai', 'ollama', 'google-genai']
-        vlm_api_host: dummy #Must be set for openai and ollama, but is not used for google-genai
-        vlm_api_model: gemini-1.5-flash
+        vlm_api_host: https://api.openai.com/v1 #Must be set for openai and ollama, but is not used for google-genai
+        vlm_api_model: gpt-4o
 
         subscribers:
             image_rgb:
-                topic: /camera/camera/color/image_raw
+                topic: /cam1/color/image_raw
 
         servers:
             visual_question_answering:

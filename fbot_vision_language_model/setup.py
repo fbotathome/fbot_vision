@@ -13,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name), glob.glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob.glob('config/*.yaml')),
+        (os.path.join('share', package_name), ['.env']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
