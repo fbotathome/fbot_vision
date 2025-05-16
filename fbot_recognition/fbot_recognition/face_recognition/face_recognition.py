@@ -104,7 +104,7 @@ class FaceRecognition(BaseRecognition):
                 self.faceRecognitionPublisher.publish(faceRecognitions)
         except KeyError as e:
             while True:
-                rospy.logwarn(f"callback error {e}")
+                self.get_logger().warning(f"callback error {e}")
 
     def declareParameters(self):
         self.declare_parameter("publishers.debug.qos_profile", 1)
@@ -201,7 +201,7 @@ class FaceRecognition(BaseRecognition):
                         else:
                             encodedFace[person].append(faceEncoding)
                     else:
-                        print(person + "/" + personImg + " was skipped and can't be used for training")
+                        self.get_logger().warning(person + "/" + personImg + " was skipped and can't be used for training")
             else:
                 pass
         self.saveVar(encodedFace, 'features')             
@@ -256,9 +256,9 @@ class FaceRecognition(BaseRecognition):
                     right = int(faceInfos.pose[1].x)
                     bottom = int(faceInfos.pose[1].y)
                     left = int(faceInfos.pose[0].x)
-                    facesBbox.append((top, right, bottom, left))
+                    faceBBs.append((top, right, bottom, left))
 
-            if len(facesBbox) > 0:
+            if len(faceBBs) > 0:
 
             # faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
                 
@@ -274,7 +274,7 @@ class FaceRecognition(BaseRecognition):
         
         peopleIntroducingResponse.response = True
 
-        self.encodeFaces(facesBbox, cvImage)
+        self.encodeFaces(faceBBs, cvImage)
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
