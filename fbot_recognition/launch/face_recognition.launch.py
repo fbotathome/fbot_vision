@@ -24,7 +24,7 @@ def generate_launch_description():
         'face_recognition.yaml']
     )
 
-    declare_arguments = []
+    declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
             'config',
@@ -90,7 +90,7 @@ def generate_launch_description():
 
 
     return LaunchDescription([
-        *declare_arguments,
+        *declared_arguments,
         face_recog_remote_node,
         face_recog_node,
         realsense2_node
