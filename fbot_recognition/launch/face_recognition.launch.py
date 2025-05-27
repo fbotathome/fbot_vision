@@ -52,7 +52,7 @@ def generate_launch_description():
         ))
 
 
-    face_recog_remote_node = NodeRemoteSSH(
+    face_recognition_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='face_recognition',
         name='face_recognition',
@@ -65,7 +65,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_remote'))
     )
 
-    face_recog_node = Node(
+    face_recognition_node = Node(
         package='fbot_recognition',
         executable='face_recognition',
         name='face_recognition',
@@ -91,7 +91,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         *declared_arguments,
-        face_recog_remote_node,
-        face_recog_node,
+        face_recognition_remote_node,
+        face_recognition_node,
         realsense2_node
     ])
