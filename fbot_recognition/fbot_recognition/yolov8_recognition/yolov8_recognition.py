@@ -106,7 +106,7 @@ class YoloV8Recognition(BaseRecognition):
                     bb3d = boundingBoxProcessing(data)
                 except Exception as e:
                     self.get_logger().error(f"Error processing bounding box: {e}")
-                    return None
+                    continue
                 
                 detection3d = self.createDetection3d(bb2d, bb3d, score, detectionHeader, label)
                 if detection3d is not None:
