@@ -55,8 +55,6 @@ class YoloV8Recognition(BaseRecognition):
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
 
         self.get_logger().info("=> Entering callback ")
-        allClasses = [cls for sublist in self.classesByCategory.values() for cls in sublist]
-        allClassesLen = len(allClasses)
 
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
             self.get_logger().error("One or more input messages are invalid.")
@@ -78,10 +76,6 @@ class YoloV8Recognition(BaseRecognition):
                     return None
                 
                 classId = int(box.cls)
-
-                if classId >= allClassesLen:
-                    self.get_logger().error(f"Class id {classId} not found in classesByCategory")
-                    return
                 
                 label = results[0].names[classId]
                 score = float(box.conf)
@@ -125,15 +119,13 @@ class YoloV8Recognition(BaseRecognition):
         detection3d = Detection3D()
         detection3d.header = detectionHeader
         detection3d.id = 0
-        detection3d.label == ''
+        detection3d.label = ''
         detection3d.score = score
 
-        for category, items in self.classesByCategory.items():
-            if label in items:
-                detection3d.label = category + '/' + label
-        if detection3d.label == '':
-            self.get_logger().error(f"Label {label} not found in classesByCategory")
-            return None
+        if '/' in label:
+            detection3d.label = label
+        else:
+            detection3d.label = f"none/{label}"
 
         detection3d.bbox2d = copy.deepcopy(bb2d)
         detection3d.bbox3d = bb3d
@@ -217,7 +209,6 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("publishers.people_detection.topic", "/fbot_vision/fr/people_detection")
         self.declare_parameter("publishers.people_detection.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("classes_by_category", "")
         self.declare_parameter("model_file", "yolov8n.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         super().declareParameters()
@@ -231,10 +222,6 @@ class YoloV8Recognition(BaseRecognition):
         self.peopleDetectionQosProfile = self.get_parameter("publishers.people_detection.qos_profile").value
         self.threshold = self.get_parameter("threshold").value
         self.get_logger().info(f"Threshold: {self.threshold}")
-        try:
-            self.classesByCategory = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
-        except Exception as e:
-            self.get_logger().error(f"classes_by_category parameter could not be turned into a dictionary: {e}")
         self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
         self.maxSizes = self.get_parameter("max_sizes").value
         super().readParameters()
