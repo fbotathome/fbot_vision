@@ -1,0 +1,4 @@
+image2world
+open3d
+ultralytics
+reidmanager
