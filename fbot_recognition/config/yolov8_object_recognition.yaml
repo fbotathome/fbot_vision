@@ -22,11 +22,7 @@ yolov8_recognition:
       object_recognition:
         topic: /fbot_vision/fr/object_recognition
         qos_profile: 10
-      
-      people_detection:
-        topic: /fbot_vision/fr/people_detection
-        qos_profile: 10
 
       debug:
-        topic: /fbot_vision/fr/debug
+        topic: /fbot_vision/fr/object_debug
         qos_profile: 10

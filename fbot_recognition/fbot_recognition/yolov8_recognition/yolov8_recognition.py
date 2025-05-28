@@ -38,7 +38,6 @@ class YoloV8Recognition(BaseRecognition):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
         self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
-        self.peopleDetectionPublisher = self.create_publisher(Detection3DArray, self.peopleDetectionTopic, qos_profile=self.peopleDetectionQosProfile)
         super().initRosComm(callbackObject=self)
 
     def loadModel(self) -> None: 
@@ -206,8 +205,6 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("publishers.debug.qos_profile", 1)
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
-        self.declare_parameter("publishers.people_detection.topic", "/fbot_vision/fr/people_detection")
-        self.declare_parameter("publishers.people_detection.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
         self.declare_parameter("model_file", "yolov8n.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
@@ -218,8 +215,6 @@ class YoloV8Recognition(BaseRecognition):
         self.debugQosProfile = self.get_parameter("publishers.debug.qos_profile").value
         self.objectRecognitionTopic = self.get_parameter("publishers.object_recognition.topic").value
         self.objectRecognitionQosProfile = self.get_parameter("publishers.object_recognition.qos_profile").value
-        self.peopleDetectionTopic = self.get_parameter("publishers.people_detection.topic").value
-        self.peopleDetectionQosProfile = self.get_parameter("publishers.people_detection.qos_profile").value
         self.threshold = self.get_parameter("threshold").value
         self.get_logger().info(f"Threshold: {self.threshold}")
         self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
