@@ -125,7 +125,7 @@ class YoloTrackerRecognition(BaseRecognition):
             results = list(self.model.track(img, persist=True,
                                         conf=self.det_threshold,
                                         iou=self.iou_threshold,
-                                        device="cuda:0",
+                                        device="cuda:0" if torch.cuda.is_available() else "cpu",
                                         tracker=self.tracker_cfg_file,
                                         verbose=True, stream=True))
             bboxs = results[0].boxes.data.cpu().numpy()
