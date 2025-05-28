@@ -26,7 +26,7 @@ from ament_index_python.packages import get_package_share_directory
 #TODO: Need one declare parameters and one read parameters functions
 
 class YoloV8Recognition(BaseRecognition):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(nodeName='yolov8_recognition')
 
         self.declareParameters()
@@ -34,25 +34,25 @@ class YoloV8Recognition(BaseRecognition):
         self.loadModel()
         self.initRosComm()
 
-    def initRosComm(self):
+    def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
         self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
         self.peopleDetectionPublisher = self.create_publisher(Detection3DArray, self.peopleDetectionTopic, qos_profile=self.peopleDetectionQosProfile)
         super().initRosComm(callbackObject=self)
 
-    def loadModel(self): 
+    def loadModel(self) -> None: 
         self.get_logger().info("=> Loading model")
         self.model = YOLO(self.modelFile)
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
-    def unLoadModel(self):
+    def unLoadModel(self) -> None:
         del self.model
         torch.cuda.empty_cache()
         self.model = None
 
-    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
         self.get_logger().info("=> Entering callback ")
 
@@ -115,7 +115,7 @@ class YoloV8Recognition(BaseRecognition):
 
         self.publishMarkers(detection3DArray.detections)
 
-    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str):
+    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str) -> Detection3D:
         detection3d = Detection3D()
         detection3d.header = detectionHeader
         detection3d.id = 0
@@ -133,7 +133,7 @@ class YoloV8Recognition(BaseRecognition):
         return detection3d
 
 
-    def publishMarkers(self, descriptions3d):
+    def publishMarkers(self, descriptions3d) -> None:
         markers = MarkerArray()
         duration = Duration()
         duration.sec = 2
@@ -201,7 +201,7 @@ class YoloV8Recognition(BaseRecognition):
         
         self.markerPublisher.publish(markers)
 
-    def declareParameters(self):
+    def declareParameters(self) -> None:
         self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug")
         self.declare_parameter("publishers.debug.qos_profile", 1)
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
@@ -213,7 +213,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         super().declareParameters()
 
-    def readParameters(self):
+    def readParameters(self) -> None:
         self.debugImageTopic = self.get_parameter("publishers.debug.topic").value
         self.debugQosProfile = self.get_parameter("publishers.debug.qos_profile").value
         self.objectRecognitionTopic = self.get_parameter("publishers.object_recognition.topic").value
