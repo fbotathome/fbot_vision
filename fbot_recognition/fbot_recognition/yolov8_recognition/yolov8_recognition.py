@@ -125,7 +125,7 @@ class YoloV8Recognition(BaseRecognition):
         if '/' in label:
             detection3d.label = label
         else:
-            detection3d.label = f"none/{label}"
+            detection3d.label = f"none/{label}" if label[0].islower() else f"None/{label}"
 
         detection3d.bbox2d = copy.deepcopy(bb2d)
         detection3d.bbox3d = bb3d
