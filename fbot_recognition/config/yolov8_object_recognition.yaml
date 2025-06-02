@@ -2,22 +2,6 @@ yolov8_recognition:
   ros__parameters:
 
     threshold: 0.6
-
-    classes_by_category: '{"Drinks": ["person", "bottle", "wine glass", "cup"],
-                          "Cleaning supplies": ["scissors", "toothbrush", "hair drier"],
-                          "Pantry items": ["banana", "apple", "orange", "sandwich", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "fork", "knife", "spoon", "bowl"],
-                          "Fruits": ["banana", "apple", "orange"],
-                          "Snacks": ["hot dog", "pizza", "donut", "cake", "frisbee", "skateboard"],
-                          "Vehicles": ["bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat"],
-                          "Traffic items": ["traffic light", "fire hydrant", "stop sign", "parking meter"],
-                          "Furniture": ["bench", "chair", "couch", "potted plant", "bed", "dining table", "tv", "refrigerator", "microwave", "oven", "toaster", "sink", "stove"],
-                          "Electronics": ["laptop", "mouse", "remote", "keyboard", "cell phone"],
-                          "Animals": ["bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"],
-                          "Personal items": ["backpack", "umbrella", "handbag", "tie", "suitcase"],
-                          "Sports": ["frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket"],
-                          "Tools": ["scissors", "teddy bear", "hair drier", "toothbrush"],
-                          "Office items": ["book", "clock", "vase", "scissors", "teddy bear"],
-                          "Others": ["cell phone", "microwave", "oven", "toaster", "sink", "refrigerator"]}'
       
     max_sizes:
         - [0.5, 0.5, 0.5]
@@ -38,11 +22,7 @@ yolov8_recognition:
       object_recognition:
         topic: /fbot_vision/fr/object_recognition
         qos_profile: 10
-      
-      people_detection:
-        topic: /fbot_vision/fr/people_detection
-        qos_profile: 10
 
       debug:
-        topic: /fbot_vision/fr/debug
+        topic: /fbot_vision/fr/object_debug
         qos_profile: 10

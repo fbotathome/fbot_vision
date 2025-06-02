@@ -26,7 +26,7 @@ from ament_index_python.packages import get_package_share_directory
 #TODO: Need one declare parameters and one read parameters functions
 
 class YoloV8Recognition(BaseRecognition):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(nodeName='yolov8_recognition')
 
         self.declareParameters()
@@ -34,29 +34,26 @@ class YoloV8Recognition(BaseRecognition):
         self.loadModel()
         self.initRosComm()
 
-    def initRosComm(self):
+    def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
         self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
-        self.peopleDetectionPublisher = self.create_publisher(Detection3DArray, self.peopleDetectionTopic, qos_profile=self.peopleDetectionQosProfile)
         super().initRosComm(callbackObject=self)
 
-    def loadModel(self): 
+    def loadModel(self) -> None: 
         self.get_logger().info("=> Loading model")
         self.model = YOLO(self.modelFile)
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
-    def unLoadModel(self):
+    def unLoadModel(self) -> None:
         del self.model
         torch.cuda.empty_cache()
         self.model = None
 
-    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
         self.get_logger().info("=> Entering callback ")
-        allClasses = [cls for sublist in self.classesByCategory.values() for cls in sublist]
-        allClassesLen = len(allClasses)
 
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
             self.get_logger().error("One or more input messages are invalid.")
@@ -78,10 +75,6 @@ class YoloV8Recognition(BaseRecognition):
                     return None
                 
                 classId = int(box.cls)
-
-                if classId >= allClassesLen:
-                    self.get_logger().error(f"Class id {classId} not found in classesByCategory")
-                    return
                 
                 label = results[0].names[classId]
                 score = float(box.conf)
@@ -121,19 +114,17 @@ class YoloV8Recognition(BaseRecognition):
 
         self.publishMarkers(detection3DArray.detections)
 
-    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str):
+    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str) -> Detection3D:
         detection3d = Detection3D()
         detection3d.header = detectionHeader
         detection3d.id = 0
-        detection3d.label == ''
+        detection3d.label = ''
         detection3d.score = score
 
-        for category, items in self.classesByCategory.items():
-            if label in items:
-                detection3d.label = category + '/' + label
-        if detection3d.label == '':
-            self.get_logger().error(f"Label {label} not found in classesByCategory")
-            return None
+        if '/' in label:
+            detection3d.label = label
+        else:
+            detection3d.label = f"none/{label}" if label[0].islower() else f"None/{label}"
 
         detection3d.bbox2d = copy.deepcopy(bb2d)
         detection3d.bbox3d = bb3d
@@ -141,7 +132,7 @@ class YoloV8Recognition(BaseRecognition):
         return detection3d
 
 
-    def publishMarkers(self, descriptions3d):
+    def publishMarkers(self, descriptions3d) -> None:
         markers = MarkerArray()
         duration = Duration()
         duration.sec = 2
@@ -209,32 +200,23 @@ class YoloV8Recognition(BaseRecognition):
         
         self.markerPublisher.publish(markers)
 
-    def declareParameters(self):
+    def declareParameters(self) -> None:
         self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug")
         self.declare_parameter("publishers.debug.qos_profile", 1)
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
-        self.declare_parameter("publishers.people_detection.topic", "/fbot_vision/fr/people_detection")
-        self.declare_parameter("publishers.people_detection.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("classes_by_category", "")
         self.declare_parameter("model_file", "yolov8n.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         super().declareParameters()
 
-    def readParameters(self):
+    def readParameters(self) -> None:
         self.debugImageTopic = self.get_parameter("publishers.debug.topic").value
         self.debugQosProfile = self.get_parameter("publishers.debug.qos_profile").value
         self.objectRecognitionTopic = self.get_parameter("publishers.object_recognition.topic").value
         self.objectRecognitionQosProfile = self.get_parameter("publishers.object_recognition.qos_profile").value
-        self.peopleDetectionTopic = self.get_parameter("publishers.people_detection.topic").value
-        self.peopleDetectionQosProfile = self.get_parameter("publishers.people_detection.qos_profile").value
         self.threshold = self.get_parameter("threshold").value
         self.get_logger().info(f"Threshold: {self.threshold}")
-        try:
-            self.classesByCategory = ast.literal_eval(self.get_parameter('classes_by_category').value) #Need to use literal_eval since rclpy doesn't support dictionaries as a parameter
-        except Exception as e:
-            self.get_logger().error(f"classes_by_category parameter could not be turned into a dictionary: {e}")
         self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
         self.maxSizes = self.get_parameter("max_sizes").value
         super().readParameters()
