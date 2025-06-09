@@ -60,13 +60,16 @@ class YoloTrackerRecognition(BaseRecognition):
     def loadTrackerModel(self):
         if self.reid_manager != None:
             return
+        self.get_logger().info("ANTES REID")
         self.reid_manager = ReIDManager(
             self.reid_model_file,
             self.reid_model_name,
             self.reid_threshold,
             self.reid_add_feature_threshold,
-            self.reid_img_size
+            self.reid_img_size,
+            device="cuda:0" if torch.cuda.is_available() else "cpu"
         )
+        self.get_logger().info("DEPOIS REID")
 
     def unLoadModel(self):
         del self.model
@@ -92,6 +95,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.tracking = False
         self.unLoadTrackerModel()
         self.get_logger().info("Tracking stoped!!!")
+        return resp
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         tracking = self.tracking

@@ -13,9 +13,9 @@ yolo_tracker_recognition:
       slop: 0.2
       qos_profile: 10
 
-      image_rgb: /fbot_vision/bvb/image_rgb
-      camera_info: /fbot_vision/bvb/camera_info
-      image_depth: /fbot_vision/bvb/image_depth
+      image_rgb: /camera/camera/color/image_raw
+      camera_info: /camera/camera/color/camera_info
+      image_depth: /camera/camera/aligned_depth_to_color/image_raw
 
     services:
     
