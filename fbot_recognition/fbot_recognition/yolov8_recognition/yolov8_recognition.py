@@ -29,6 +29,7 @@ class YoloV8Recognition(BaseRecognition):
     def __init__(self) -> None:
         super().__init__(nodeName='yolov8_recognition')
 
+        self.labels_dict: dict = {}
         self.declareParameters()
         self.readParameters()
         self.loadModel()
@@ -106,6 +107,7 @@ class YoloV8Recognition(BaseRecognition):
                     detection3DArray.detections.append(detection3d)
                     
         self.objectRecognitionPublisher.publish(detection3DArray)
+        self.labels_dict.clear()
 
         imageArray = results[0].plot()
         image = IMG.fromarray(imageArray[..., ::-1])
@@ -117,14 +119,19 @@ class YoloV8Recognition(BaseRecognition):
     def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str) -> Detection3D:
         detection3d = Detection3D()
         detection3d.header = detectionHeader
-        detection3d.id = 0
-        detection3d.label = ''
         detection3d.score = score
 
         if '/' in label:
             detection3d.label = label
         else:
             detection3d.label = f"none/{label}" if label[0].islower() else f"None/{label}"
+
+        if detection3d.label in self.labels_dict:
+            self.labels_dict[detection3d.label] += 1
+        else:
+            self.labels_dict[detection3d.label] = 1
+            
+        detection3d.id = self.labels_dict[detection3d.label]
 
         detection3d.bbox2d = copy.deepcopy(bb2d)
         detection3d.bbox3d = bb3d
