@@ -16,6 +16,7 @@ from image2world.image2worldlib import *
 
 from fbot_recognition import BaseRecognition
 
+import rclpy.logging
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
@@ -102,9 +103,9 @@ class FaceRecognition(BaseRecognition):
                 data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
                 data.boundingBox2D.size_x = float(bottom-top)
                 data.boundingBox2D.size_y = float(right-left)
-                data.maxSize.x = 3
-                data.maxSize.y = 3
-                data.maxSize.z = 3
+                data.maxSize.x = float(3)
+                data.maxSize.y = float(3)
+                data.maxSize.z = float(3)
 
                 bb2d = data.boundingBox2D
         
@@ -120,7 +121,7 @@ class FaceRecognition(BaseRecognition):
                 cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
                 detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
                 if detection3d is not None:
-                    faceRecognitions.detections.append(detection)
+                    faceRecognitions.detections.append(detection3d)
 
             self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8'))
 
@@ -310,7 +311,7 @@ class FaceRecognition(BaseRecognition):
         detection3d.id = 0
         detection3d.label = label
         detection3d.bbox2d = copy.deepcopy(bb2d)
-        detection3d.bbox3d = bb3d
+        detection3d.bbox3d = copy.deepcopy(bb3d)
 
         return detection3d
 
