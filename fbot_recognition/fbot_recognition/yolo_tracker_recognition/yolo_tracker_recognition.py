@@ -151,7 +151,8 @@ class YoloTrackerRecognition(BaseRecognition):
             img_patchs = []
             for x1,y1,x2,y2 in results[0].boxes.xyxy.cpu().numpy():
                 img_patchs.append(img[int(y1):int(y2),int(x1):int(x2)])
-            ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+            # ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+            ids = results[0].boxes.id.cpu().numpy()
         for i, box in enumerate(bboxs):
             description = Detection2D()
             description.header = HEADER
