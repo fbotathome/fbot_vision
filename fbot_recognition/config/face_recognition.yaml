@@ -8,9 +8,9 @@ face_recognition:
       qos_profile: 1
       slop: 0.2
 
-      image_rgb: /fbot_vision/realsense/color/image_raw
-      camera_info: /fbot_vision/realsense/color/camera_info
-      image_depth: /fbot_vision/realsense/aligned_depth_to_color/image_raw
+      image_rgb: /fbot_vision/camera/color/image_raw
+      camera_info: /fbot_vision/camera/color/camera_info
+      image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
 
 
     publishers:
