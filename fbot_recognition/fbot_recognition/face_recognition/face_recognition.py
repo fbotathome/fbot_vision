@@ -11,9 +11,12 @@ import time
 from ament_index_python.packages import get_package_share_directory
 from collections import Counter
 import pickle
+import copy
+from image2world.image2worldlib import *
 
 from fbot_recognition import BaseRecognition
 
+import rclpy.logging
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
@@ -91,12 +94,34 @@ class FaceRecognition(BaseRecognition):
                 detection.bbox2d.size_x = float(bottom-top)
                 detection.bbox2d.size_y = float(right-left)
 
+                bb2d = BoundingBox2D()
+                data = BoundingBoxProcessingData()
+                data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+
+
+                data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
+                data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
+                data.boundingBox2D.size_x = float(bottom-top)
+                data.boundingBox2D.size_y = float(right-left)
+                data.maxSize.x = float(3)
+                data.maxSize.y = float(3)
+                data.maxSize.z = float(3)
+
+                bb2d = data.boundingBox2D
+        
+                try:
+                    bb3d = boundingBoxProcessing(data)
+                except Exception as e:
+                    self.get_logger().error(f"Error processing bounding box: {e}")
+                    continue
+
                 cv2.rectangle(debugImg, (left, top), (right, bottom), (0, 255, 0), 2)
                 
                 font = cv2.FONT_HERSHEY_DUPLEX
                 cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
-               
-                faceRecognitions.detections.append(detection)
+                detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
+                if detection3d is not None:
+                    faceRecognitions.detections.append(detection3d)
 
             self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8'))
 
@@ -279,6 +304,16 @@ class FaceRecognition(BaseRecognition):
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
         return peopleIntroducingResponse
+    
+    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str) -> Detection3D:
+        detection3d = Detection3D()
+        detection3d.header = detectionHeader
+        detection3d.id = 0
+        detection3d.label = label
+        detection3d.bbox2d = copy.deepcopy(bb2d)
+        detection3d.bbox3d = copy.deepcopy(bb3d)
+
+        return detection3d
 
 
 def main(args=None):
