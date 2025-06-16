@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 import os
 
 try:
-    from langchain_community.chat_models.ollama import ChatOllama
+    from langchain_ollama import ChatOllama
 except:
     pass
 try:
@@ -42,9 +42,9 @@ class VisionLanguageModel(Node):
         self.read_parameters()
 
         if self.vlm_api_type == 'ollama':
-            self.vlm = ChatOllama(model=self.vlm_api_model, base_url=self.vlm_api_host)
+            self.vlm = ChatOllama(model=self.vlm_api_model)
         elif self.vlm_api_type == 'openai':
-            self.vlm = ChatOpenAI(model_name=self.vlm_api_model, openai_api_base=self.vlm_api_host, api_key=self.vlm_api_key)
+            self.vlm = ChatOpenAI(model_name=self.vlm_api_model, openai_api_base=self.vlm_api_host)
         elif self.vlm_api_type == 'google-genai':
             self.vlm = ChatGoogleGenerativeAI(model=self.vlm_api_model, convert_system_message_to_human=True)
         else:
@@ -101,8 +101,8 @@ class VisionLanguageModel(Node):
         self.vlm_api_type = self.get_parameter('vlm_api_type').value
         self.vlm_api_host = self.get_parameter('vlm_api_host').value
         self.vlm_api_model = self.get_parameter('vlm_api_model').value
-        self.vlm_api_key = os.getenv('VLM_API_KEY')
-        print('vlm_api_key = ', self.vlm_api_key)
+        # self.vlm_api_key = os.getenv('VLM_API_KEY')
+        # print('vlm_api_key = ', self.vlm_api_key)
         self.rgb_image_topic = self.get_parameter('subscribers/image_rgb/topic').value
         self.visual_question_answering_service = self.get_parameter('servers/visual_question_answering/service').value
     

@@ -1,8 +1,8 @@
 vision_language_model:
     ros__parameters:
-        vlm_api_type: openai #Must be one of: ['openai', 'ollama', 'google-genai']
-        vlm_api_host: https://api.openai.com/v1 #Must be set for openai and ollama, but is not used for google-genai
-        vlm_api_model: gpt-4o
+        vlm_api_type: ollama #Must be one of: ['openai', 'ollama', 'google-genai']
+        vlm_api_host: http://localhost:11434/api/generate #Must be set for openai and ollama, but is not used for google-genai
+        vlm_api_model: gemma3:4b
 
         subscribers:
             image_rgb:
