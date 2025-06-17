@@ -78,7 +78,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
         ),
         launch_arguments={
-            'camera_name': 'realsense',
+            'camera_name': 'camera',
             'camera_namespace': 'fbot_vision',
             'enable_rgbd': 'true',
             'enable_sync': 'true',
