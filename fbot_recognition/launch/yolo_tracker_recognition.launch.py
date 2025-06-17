@@ -42,7 +42,7 @@ def generate_launch_description():
 
     launch_realsense_arg = DeclareLaunchArgument(
         'use_realsense',
-        default_value='true',
+        default_value='false',
         description="If should launch the camera node"
     )
 
