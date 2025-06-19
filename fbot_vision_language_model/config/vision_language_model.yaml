@@ -7,7 +7,16 @@ vision_language_model:
         subscribers:
             image_rgb:
                 topic: /cam1/color/image_raw
+                timeout: 5
+            question:
+                topic: /fbot_vision/bvlm/visual_question_answering/question
+        
+        publishers:
+            answer:
+                topic: /fbot_vision/bvlm/visual_question_answering/answer
 
         servers:
             visual_question_answering:
                 service: /fbot_vision/bvlm/visual_question_answering/query
+            answer_history:
+                service: /fbot_vision/bvlm/answer_history/query

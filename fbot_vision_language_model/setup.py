@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'vision_language_model = fbot_vision_language_model.vision_language_model.vision_language_model:main',
+            'test_vlm = fbot_vision_language_model.vision_language_model.test_vlm:main',
         ],
     },
 )
