@@ -37,7 +37,7 @@ class YoloV8Recognition(BaseRecognition):
 
     def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
+        self.markerPublisher = self.create_publisher(MarkerArray, 'fbot_vision/fr/object_markers', qos_profile=self.debugQosProfile)
         self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
         super().initRosComm(callbackObject=self)
 
