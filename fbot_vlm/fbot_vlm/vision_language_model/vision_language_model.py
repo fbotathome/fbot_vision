@@ -260,6 +260,9 @@ class VisionLanguageModel(Node):
             raise
 
         self.declare_parameters_from_dict(config)
+        self.declare_parameter('vlm_api_type', 'None')
+        self.declare_parameter('vlm_api_host', 'http://localhost:11434')
+        self.declare_parameter('vlm_api_model', 'None')
             
     def declare_parameters_from_dict(self, params, path=''):
         for key, value in params.items():
