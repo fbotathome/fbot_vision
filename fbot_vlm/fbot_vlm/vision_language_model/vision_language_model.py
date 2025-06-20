@@ -237,7 +237,6 @@ class VisionLanguageModel(Node):
     def read_parameters(self):
         package_share_dir = get_package_share_directory('fbot_vlm')
         dotenv_path = os.path.join(package_share_dir, '.env')
-        load_dotenv(dotenv_path=dotenv_path)
         self.vlm_api_type = self.get_parameter('vlm_api_type').value
         self.vlm_api_host = self.get_parameter('vlm_api_host').value
         self.vlm_api_model = self.get_parameter('vlm_api_model').value
@@ -247,6 +246,8 @@ class VisionLanguageModel(Node):
         self.vlm_question_topic = self.get_parameter('subscribers/question/topic').value
         self.vlm_answer_topic = self.get_parameter('publishers/answer/topic').value
         self.vlm_history_service_name = self.get_parameter('servers/answer_history/service').value
+        if self.vlm_api_type in ('openai', 'google-genai'):
+            load_dotenv(dotenv_path=dotenv_path)
     
     def load_params(self, filename):
         try:
