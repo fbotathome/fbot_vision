@@ -17,9 +17,10 @@ from image2world.image2worldlib import *
 from fbot_recognition import BaseRecognition
 
 import rclpy.logging
+from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
-from fbot_vision_msgs.msg import Detection3D, Detection3DArray
+from fbot_vision_msgs.msg import Detection3D, Detection3DArray, KeyPoint2D
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
@@ -120,6 +121,7 @@ class FaceRecognition(BaseRecognition):
                 font = cv2.FONT_HERSHEY_DUPLEX
                 cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
                 detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
+
                 if detection3d is not None:
                     faceRecognitions.detections.append(detection3d)
 
@@ -127,6 +129,7 @@ class FaceRecognition(BaseRecognition):
 
             if len(faceRecognitions.detections) > 0:
                 self.faceRecognitionPublisher.publish(faceRecognitions)
+                self.last_detection = faceRecognitions
         except KeyError as e:
             while True:
                 self.get_logger().warning(f"callback error {e}")
@@ -266,21 +269,22 @@ class FaceRecognition(BaseRecognition):
             
             try:
                 # _,image = rclpy.wait_for_message.wait_for_message(Image, self, self.topicsToSubscribe['image_rgb'])
-                _,faceMessage = rclpy.wait_for_message.wait_for_message(Detection3DArray, self, self.faceRecognitionTopic)
+                # _,faceMessage = rclpy.wait_for_message.wait_for_message(Detection3DArray, self, self.faceRecognitionTopic)
+                faceMessage = self.last_detection
                 image = faceMessage.image_rgb
                 cvImage = self.cvBridge.imgmsg_to_cv2(image)
                 cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
             except (Exception) as e:
+                self.get_logger().error(f"Error receiving image or face message: {e}")
                 break
             
 
             for faceInfos in faceMessage.detections:
-
                 if faceInfos.label == 'unknown':
-                    top = int(faceInfos.pose[0].y)
-                    right = int(faceInfos.pose[1].x)
-                    bottom = int(faceInfos.pose[1].y)
-                    left = int(faceInfos.pose[0].x)
+                    top = int(faceInfos.bbox2d.center.position.y - faceInfos.bbox2d.size_y / 2)
+                    right = int(faceInfos.bbox2d.center.position.x + faceInfos.bbox2d.size_x / 2)
+                    bottom = int(faceInfos.bbox2d.center.position.y + faceInfos.bbox2d.size_y / 2)
+                    left = int(faceInfos.bbox2d.center.position.x - faceInfos.bbox2d.size_x / 2)
                     faceBoundingBoxes.append((top, right, bottom, left))
 
             if len(faceBoundingBoxes) > 0:
