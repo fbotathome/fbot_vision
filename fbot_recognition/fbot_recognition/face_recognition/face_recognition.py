@@ -17,13 +17,13 @@ from image2world.image2worldlib import *
 from fbot_recognition import BaseRecognition
 
 import rclpy.logging
-from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
-from fbot_vision_msgs.msg import Detection3D, Detection3DArray, KeyPoint2D
+from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 import rclpy.wait_for_message
 
@@ -46,9 +46,10 @@ class FaceRecognition(BaseRecognition):
     def initRosComm(self):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
-        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB)
+        service_cb_group = ReentrantCallbackGroup()
+        self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         super().initRosComm(callbackObject=self)
-
+        
     def loadModel(self):
         pass
 
@@ -121,7 +122,6 @@ class FaceRecognition(BaseRecognition):
                 font = cv2.FONT_HERSHEY_DUPLEX
                 cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
                 detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
-
                 if detection3d is not None:
                     faceRecognitions.detections.append(detection3d)
 
@@ -275,11 +275,11 @@ class FaceRecognition(BaseRecognition):
                 cvImage = self.cvBridge.imgmsg_to_cv2(image)
                 cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
             except (Exception) as e:
-                self.get_logger().error(f"Error receiving image or face message: {e}")
                 break
             
 
             for faceInfos in faceMessage.detections:
+
                 if faceInfos.label == 'unknown':
                     top = int(faceInfos.bbox2d.center.position.y - faceInfos.bbox2d.size_y / 2)
                     right = int(faceInfos.bbox2d.center.position.x + faceInfos.bbox2d.size_x / 2)
@@ -323,9 +323,9 @@ class FaceRecognition(BaseRecognition):
 def main(args=None):
     rclpy.init(args=args)
     node = FaceRecognition()
-    
-    rclpy.spin(node)
-    node.destroy_node()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.spin()
     rclpy.shutdown()
 
 if __name__ == '__main__':
