@@ -18,6 +18,8 @@ from io import BytesIO
 from langchain_core.messages import HumanMessage
 
 from dotenv import load_dotenv
+import requests
+from requests.exceptions import RequestException
 
 try:
     from langchain_ollama import ChatOllama
@@ -53,16 +55,15 @@ class VisionLanguageModel(Node):
         self.read_parameters()
 
         if self.vlm_api_type == 'ollama':
-            self.vlm = ChatOllama(model=self.vlm_api_model)
+            self.vlm = ChatOllama(model=self.vlm_api_model, base_url=self.vlm_api_host)
         elif self.vlm_api_type == 'openai':
             self.vlm = ChatOpenAI(model_name=self.vlm_api_model, openai_api_base=self.vlm_api_host)
         elif self.vlm_api_type == 'google-genai':
             self.vlm = ChatGoogleGenerativeAI(model=self.vlm_api_model, convert_system_message_to_human=True)
         else:
             raise ValueError(f"VLM API type must be one of: {['ollama', 'openai', 'google-genai']}!")
-        print('vlm = ', self.vlm)
 
-        self.get_logger().info(f"VisionLanguageModel initialized with API type: {self.vlm_api_type}, model: {self.vlm_api_model}")
+        self.get_logger().info(f"VisionLanguageModel initialized with API type: {self.vlm_api_type}, model: {self.vlm_api_model}, host: {self.vlm_api_host}")
 
         self.answer_history: dict[str, list[VLMAnswer]] = {}
         self.vlm_service = self.create_service(VLMQuestionAnswering, self.vlm_service_name, self.handleServiceQuestionAnswering)
@@ -76,6 +77,7 @@ class VisionLanguageModel(Node):
     def handleServiceQuestionAnswering(self, req: VLMQuestionAnswering.Request, res: VLMQuestionAnswering.Response):
         self.get_logger().info(f"Received question: {req.question}, use_image: {req.use_image}")
         try:
+            self.validateHostConnection()
             self.validateQuestion(req)
             message = self.getHumanMessage(req.question, use_image=req.use_image, image=req.image)
             result = self.vlm.invoke([message,])
@@ -123,6 +125,7 @@ class VisionLanguageModel(Node):
         answer_msg = VLMAnswer()
 
         try:
+            self.validateHostConnection()
             self.validateQuestion(msg)
             message = self.getHumanMessage(msg.question, use_image=msg.use_image, image=msg.image)
             result = self.vlm.invoke([message,])
@@ -147,6 +150,20 @@ class VisionLanguageModel(Node):
         else:
             answer_obj.question_id = len(self.answer_history[answer_obj.question])
         self.answer_history[answer_obj.question].append(answer_obj)
+
+    
+    def validateHostConnection(self, timeout=5):
+        try:
+            response = requests.get(self.vlm_api_host, timeout=timeout)
+            if response.status_code == 200:
+                self.get_logger().info(f"Conexão com o host {self.vlm_api_host} validada com sucesso.")
+                return True
+            else:
+                error_message = f"Host {self.vlm_api_host} respondeu com status {response.status_code}."
+                raise ConnectionError(error_message)
+        except RequestException as e:
+            error_message = f"Erro ao conectar ao host {self.vlm_api_host}: {e}"
+            raise ConnectionError(error_message)
     
     def validateQuestion(self, msg: VLMQuestion | VLMAnswerHistory.Request):
         """
@@ -218,7 +235,7 @@ class VisionLanguageModel(Node):
             }
 
     def read_parameters(self):
-        package_share_dir = get_package_share_directory('fbot_vision_language_model')
+        package_share_dir = get_package_share_directory('fbot_vlm')
         dotenv_path = os.path.join(package_share_dir, '.env')
         load_dotenv(dotenv_path=dotenv_path)
         self.vlm_api_type = self.get_parameter('vlm_api_type').value
@@ -226,14 +243,14 @@ class VisionLanguageModel(Node):
         self.vlm_api_model = self.get_parameter('vlm_api_model').value
         self.rgb_image_topic = self.get_parameter('subscribers/image_rgb/topic').value
         self.rgb_image_timeout = self.get_parameter('subscribers/image_rgb/timeout').value
-        self.vlm_service_name = self.get_parameter('servers/visual_question_answering/service').value
+        self.vlm_service_name = self.get_parameter('servers/question_answering/service').value
         self.vlm_question_topic = self.get_parameter('subscribers/question/topic').value
         self.vlm_answer_topic = self.get_parameter('publishers/answer/topic').value
         self.vlm_history_service_name = self.get_parameter('servers/answer_history/service').value
     
     def load_params(self, filename):
         try:
-            with open(os.path.join(get_package_share_directory('fbot_vision_language_model'), 'config', filename)) as config_file:
+            with open(os.path.join(get_package_share_directory('fbot_vlm'), 'config', filename)) as config_file:
                 config = yaml.safe_load(config_file)[self.get_name()]['ros__parameters']
         except FileNotFoundError:
             self.get_logger().error(f"Configuration file {filename} not found.")

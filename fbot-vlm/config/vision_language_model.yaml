@@ -1,7 +1,7 @@
 vision_language_model:
     ros__parameters:
         vlm_api_type: ollama #Must be one of: ['openai', 'ollama', 'google-genai']
-        vlm_api_host: http://localhost:11434/api/generate #Must be set for openai and ollama, but is not used for google-genai
+        vlm_api_host: http://192.168.0.106:11434 #Must be set for openai and ollama, but is not used for google-genai
         vlm_api_model: gemma3:4b
 
         subscribers:
@@ -9,14 +9,14 @@ vision_language_model:
                 topic: /cam1/color/image_raw
                 timeout: 5
             question:
-                topic: /fbot_vision/bvlm/visual_question_answering/question
+                topic: /fbot_vision/bvlm/question_answering/question
         
         publishers:
             answer:
-                topic: /fbot_vision/bvlm/visual_question_answering/answer
+                topic: /fbot_vision/bvlm/question_answering/answer
 
         servers:
-            visual_question_answering:
-                service: /fbot_vision/bvlm/visual_question_answering/query
+            question_answering:
+                service: /fbot_vision/bvlm/question_answering/query
             answer_history:
                 service: /fbot_vision/bvlm/answer_history/query

@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 import os
 import glob
 
-package_name = 'fbot_vision_language_model'
+package_name = 'fbot_vlm'
 
 setup(
     name=package_name,
@@ -24,8 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vision_language_model = fbot_vision_language_model.vision_language_model.vision_language_model:main',
-            'test_vlm = fbot_vision_language_model.vision_language_model.test_vlm:main',
+            'vision_language_model = fbot_vlm.vision_language_model.vision_language_model:main',
+            'test_vlm = fbot_vlm.vision_language_model.test_vlm:main',
         ],
     },
 )

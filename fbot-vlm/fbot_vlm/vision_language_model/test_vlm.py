@@ -10,7 +10,7 @@ class VisionLanguageModelTester(Node):
         super().__init__('vision_language_model_tester')
 
         # Cliente para o serviço VLMQuestionAnswering
-        self.vlm_service_client = self.create_client(VLMQuestionAnswering, '/fbot_vision/bvlm/visual_question_answering/query')
+        self.vlm_service_client = self.create_client(VLMQuestionAnswering, '/fbot_vision/bvlm/question_answering/query')
         while not self.vlm_service_client.wait_for_service(timeout_sec=5.0):
             self.get_logger().info('Aguardando o serviço VLMQuestionAnswering estar disponível...')
 
@@ -20,11 +20,11 @@ class VisionLanguageModelTester(Node):
             self.get_logger().info('Aguardando o serviço VLMAnswerHistory estar disponível...')
 
         # Publicador para o tópico VLMQuestion
-        self.question_publisher = self.create_publisher(VLMQuestion, '/fbot_vision/bvlm/visual_question_answering/question', 10)
+        self.question_publisher = self.create_publisher(VLMQuestion, '/fbot_vision/bvlm/question_answering/question', 10)
 
         # Assinante para o tópico VLMAnswer
         self.topic_answer_received = False
-        self.answer_subscriber = self.create_subscription(VLMAnswer, '/fbot_vision/bvlm/visual_question_answering/answer', self.answer_callback, 10)
+        self.answer_subscriber = self.create_subscription(VLMAnswer, '/fbot_vision/bvlm/question_answering/answer', self.answer_callback, 10)
         # Testa os serviços e tópicos
         self.test_services_and_topics()
 

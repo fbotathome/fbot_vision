@@ -7,7 +7,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
 
     config = os.path.join(
-        get_package_share_directory('fbot_vision_language_model'),
+        get_package_share_directory('fbot_vlm'),
         'config',
         'vision_language_model.yaml'
         )
@@ -15,7 +15,7 @@ def generate_launch_description():
         
     return launch.LaunchDescription([
         Node(
-            package='fbot_vision_language_model',
+            package='fbot_vlm',
             executable='vision_language_model',
             name='vision_language_model',
             parameters = [config])
