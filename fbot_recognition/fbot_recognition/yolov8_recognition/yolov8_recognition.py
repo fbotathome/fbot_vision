@@ -4,7 +4,7 @@ import rclpy
 import copy
 import numpy as np
 import torch
-import ast
+import cv2
 
 from ultralytics import YOLO
 from PIL import Image as IMG
@@ -83,7 +83,6 @@ class YoloV8Recognition(BaseRecognition):
                 bb2d = BoundingBox2D()
                 data = BoundingBoxProcessingData()
                 data.sensor.setSensorData(cameraInfoMsg, depthMsg)
-
                 centerX, centerY, sizeX, sizeY = map(float, box.xywh[0])
 
                 data.boundingBox2D.center.position.x = centerX
@@ -109,9 +108,7 @@ class YoloV8Recognition(BaseRecognition):
         self.objectRecognitionPublisher.publish(detection3DArray)
         self.labels_dict.clear()
 
-        imageArray = results[0].plot()
-        image = IMG.fromarray(imageArray[..., ::-1])
-        debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
+        debugImageMsg = self.createDebugImage(imageMsg, detection3DArray)
         self.debugPublisher.publish(debugImageMsg)
 
         self.publishMarkers(detection3DArray.detections)
@@ -206,6 +203,35 @@ class YoloV8Recognition(BaseRecognition):
                     markers.markers.append(marker)
         
         self.markerPublisher.publish(markers)
+
+    def createDebugImage(self, cvImage, detection3DArray: Detection3DArray) -> Image:
+        originalImage = cvImage.copy()
+
+        for detection in detection3DArray.detections:
+            label = f"{detection.label} : {detection.score:.2f}"
+            label_margin = 3 
+            topLeftCorner = (
+                int(detection.bbox2d.center.position.x - detection.bbox2d.size_x / 2), 
+                int(detection.bbox2d.center.position.y - detection.bbox2d.size_y / 2)
+            )
+            bottomRightCorner = (
+                int(detection.bbox2d.center.position.x + detection.bbox2d.size_x / 2), 
+                int(detection.bbox2d.center.position.y + detection.bbox2d.size_y / 2)
+            )
+            cv2.rectangle(originalImage, topLeftCorner, bottomRightCorner, color=(0, 0, 255), thickness=1)
+
+            label_size = cv2.getTextSize(label, fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, thickness=1)[0]
+            label_w = label_size[0] + 2 * label_margin
+            label_h = label_size[1] + 2 * label_margin
+
+            cv2.rectangle(originalImage, topLeftCorner, (topLeftCorner[0] + label_w, topLeftCorner[1] - label_h), color=(0, 0, 255), thickness=-1)
+            cv2.putText(originalImage, label, (topLeftCorner[0] + label_margin, topLeftCorner[1] - label_margin),
+                        fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.0, color=(255, 255, 255), thickness=1)
+
+        debugImage = self.cvBridge.cv2_to_imgmsg(cvImage, encoding="bgr8")
+        debugImage.header = detection3DArray.header
+        return debugImage
+
 
     def declareParameters(self) -> None:
         self.declare_parameter("publishers.debug.topic", "/fbot_vision/fr/debug")
