@@ -28,6 +28,7 @@ setup(
             'yolov8_recognition = fbot_recognition.yolov8_recognition.yolov8_recognition:main',
             'yolo_tracker_recognition = fbot_recognition.yolo_tracker_recognition.yolo_tracker_recognition:main',
             'face_recognition = fbot_recognition.face_recognition.face_recognition:main',
+            'moondream_recognition = fbot_recognition.moondream_recognition.moondream_recognition:main',
         ],
     },
 )
