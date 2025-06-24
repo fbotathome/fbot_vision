@@ -266,6 +266,8 @@ class YoloTrackerRecognition(BaseRecognition):
             except Exception as e:
                 self.get_logger().warn(str(e))
                 continue
+            if np.linalg.norm([bbox3D.pose.position.x,bbox3D.pose.position.y,bbox3D.pose.position.z]) < 0.1:
+                continue
             pose3D = []
 
             if results[0].keypoints != None:
