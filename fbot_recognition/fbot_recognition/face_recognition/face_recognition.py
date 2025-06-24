@@ -268,8 +268,6 @@ class FaceRecognition(BaseRecognition):
             self.regressiveCounter(peopleIntroducingRequest.interval)
             
             try:
-                # _,image = rclpy.wait_for_message.wait_for_message(Image, self, self.topicsToSubscribe['image_rgb'])
-                # _,faceMessage = rclpy.wait_for_message.wait_for_message(Detection3DArray, self, self.faceRecognitionTopic)
                 faceMessage = self.last_detection
                 image = faceMessage.image_rgb
                 cvImage = self.cvBridge.imgmsg_to_cv2(image)
@@ -289,10 +287,6 @@ class FaceRecognition(BaseRecognition):
 
             if len(faceBoundingBoxes) > 0:
 
-            # faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
-                
-            # if len(faceLocations) > 0:
-                
                 cv2.imwrite(os.path.join(dirName, addImageLabels[i]), cvImage)
                 self.get_logger().warning('Picture ' + addImageLabels[i] + ' was  saved.')
                 i+= 1
