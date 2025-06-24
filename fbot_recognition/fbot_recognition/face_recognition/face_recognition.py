@@ -129,7 +129,6 @@ class FaceRecognition(BaseRecognition):
 
             if len(faceRecognitions.detections) > 0:
                 self.faceRecognitionPublisher.publish(faceRecognitions)
-                self.last_detection = faceRecognitions
         except KeyError as e:
             while True:
                 self.get_logger().warning(f"callback error {e}")
@@ -279,10 +278,10 @@ class FaceRecognition(BaseRecognition):
             for faceInfos in faceMessage.detections:
 
                 if faceInfos.label == 'unknown':
-                    top = int(faceInfos.bbox2d.center.position.y - faceInfos.bbox2d.size_y / 2)
-                    right = int(faceInfos.bbox2d.center.position.x + faceInfos.bbox2d.size_x / 2)
-                    bottom = int(faceInfos.bbox2d.center.position.y + faceInfos.bbox2d.size_y / 2)
-                    left = int(faceInfos.bbox2d.center.position.x - faceInfos.bbox2d.size_x / 2)
+                    top = int(faceInfos.pose[0].y)
+                    right = int(faceInfos.pose[1].x)
+                    bottom = int(faceInfos.pose[1].y)
+                    left = int(faceInfos.pose[0].x)
                     faceBoundingBoxes.append((top, right, bottom, left))
 
             if len(faceBoundingBoxes) > 0:
