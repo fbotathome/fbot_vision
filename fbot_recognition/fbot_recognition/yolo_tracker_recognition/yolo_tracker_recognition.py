@@ -10,7 +10,7 @@ from copy import deepcopy
 
 from ultralytics import YOLO
 from ReIDManager import ReIDManager
-from image2world import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
+from image2world.image2worldlib import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
 from fbot_recognition import BaseRecognition
 import numpy as np
 
@@ -98,6 +98,8 @@ class YoloTrackerRecognition(BaseRecognition):
         return resp
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+
+        self.get_logger().error("Callback called")
         tracking = self.tracking
 
         img = imageMsg

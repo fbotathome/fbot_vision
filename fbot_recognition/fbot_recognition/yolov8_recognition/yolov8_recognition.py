@@ -204,7 +204,7 @@ class YoloV8Recognition(BaseRecognition):
                     marker.pose.orientation.w = 1.0
                     marker.lifetime = duration
                     markers.markers.append(marker)
-        
+                    
         self.markerPublisher.publish(markers)
 
     def declareParameters(self) -> None:
