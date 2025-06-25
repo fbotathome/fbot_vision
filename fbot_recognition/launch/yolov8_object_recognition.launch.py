@@ -27,13 +27,13 @@ def generate_launch_description():
     declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
-            'config',
+            'config_object_recognition',
             default_value=config_file_path,
             description='Path to the parameter file'
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
-            'remote_config',
+            'remote_config_object_recognition',
             default_value=config_file_path_remote,
             description='Path to the remote parameter file'
         ))
@@ -54,7 +54,7 @@ def generate_launch_description():
         package='fbot_recognition',
         executable='yolov8_recognition',
         name='yolov8_recognition',
-        parameters=[LaunchConfiguration('remote_config'),],
+        parameters=[LaunchConfiguration('remote_config_object_recognition'),],
         user='jetson',
         machine="jetson",
         source_paths=[
@@ -67,7 +67,7 @@ def generate_launch_description():
         package='fbot_recognition',
         executable='yolov8_recognition',
         name='yolov8_recognition',
-        parameters=[LaunchConfiguration('config'),],
+        parameters=[LaunchConfiguration('config_object_recognition'),],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
