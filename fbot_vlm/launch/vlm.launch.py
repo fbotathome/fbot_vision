@@ -17,7 +17,7 @@ def generate_launch_description():
     declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
-            'config',
+            'config_vlm',
             default_value=config_file_path,
             description='Path to the parameter file'
         ))
@@ -48,7 +48,7 @@ def generate_launch_description():
         executable='vision_language_model',
         name='vision_language_model',
         parameters=[
-            LaunchConfiguration('config'),
+            LaunchConfiguration('config_vlm'),
             {'vlm_api_type': LaunchConfiguration('vlm_api_type')},
             {'vlm_api_model': LaunchConfiguration('vlm_api_model')},
             {'vlm_api_host': LaunchConfiguration('vlm_api_host')},
