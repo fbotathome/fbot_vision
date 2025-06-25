@@ -1,0 +1,25 @@
+moondream_recognition:
+  ros__parameters:
+      
+    max_sizes:
+        - [5.0, 5.0, 5.0]
+
+    subscribers:
+      
+      slop: 0.2
+      qos_profile: 10
+
+      image_rgb: /fbot_vision/camera/color/image_raw
+      camera_info: /fbot_vision/camera/color/camera_info
+      image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
+      object_prompt: /fbot_vision/fr/object_prompt
+      
+    publishers:
+
+      object_recognition:
+        topic: /fbot_vision/fr/object_recognition
+        qos_profile: 10
+
+      debug:
+        topic: /fbot_vision/fr/object_debug
+        qos_profile: 10
