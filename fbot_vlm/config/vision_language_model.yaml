@@ -3,7 +3,7 @@ vision_language_model:
 
         subscribers:
             image_rgb:
-                topic: /cam1/color/image_raw
+                topic: /fbot_vision/camera/color/image_raw
                 timeout: 5
             question:
                 topic: /fbot_vision/bvlm/question_answering/question

@@ -1,8 +1,10 @@
+import cv2
 import rclpy
 from rclpy.node import Node
 from fbot_vision_msgs.srv import VLMQuestionAnswering, VLMAnswerHistory
 from fbot_vision_msgs.msg import VLMQuestion, VLMAnswer
 from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 import time
 
 class VisionLanguageModelTester(Node):
@@ -28,12 +30,17 @@ class VisionLanguageModelTester(Node):
         # Testa os serviços e tópicos
         self.test_services_and_topics()
 
+        origin_image = cv2.imread('/home/marina/Documentos/FBot/pessoa1.jpg')  
+        bridge = CvBridge()
+        self.image_msg = bridge.cv2_to_imgmsg(origin_image, encoding='bgr8')
+
     def test_services_and_topics(self):
         # Testa o serviço VLMQuestionAnswering
         self.get_logger().info('Chamando o serviço VLMQuestionAnswering...')
         request = VLMQuestionAnswering.Request()
         request.question = "Qual é o objeto na imagem?"
         request.use_image = False
+        request.image = self.image_msg
         response = self.vlm_service_client.call(request)
         if response is None:
             self.get_logger().error('Falha ao chamar o serviço VLMQuestionAnswering')

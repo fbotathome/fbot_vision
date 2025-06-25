@@ -82,6 +82,7 @@ class VisionLanguageModel(Node):
             message = self.getHumanMessage(req.question, use_image=req.use_image, image=req.image)
             result = self.vlm.invoke([message,])
             res.success = True
+            self.get_logger().info(f"VLM invoked successfully with question: {req.question}")
             res.answer = result.content
             res.confidence = 1.0
         except Exception as e:
@@ -213,7 +214,7 @@ class VisionLanguageModel(Node):
             if not success:
                 raise ValueError(f"Timeout waiting for image on topic {self.rgb_image_topic} after {self.rgb_image_timeout} seconds.")
         else:
-            self.get_logger().info(f"Using provided image for question: {question_image}")
+            self.get_logger().info(f"Using provided image for question.")
             self.rgb_image_msg = question_image
         
         buffered = BytesIO()
