@@ -11,11 +11,11 @@ yolo_tracker_recognition:
     subscribers:
       
       slop: 0.2
-      qos_profile: 1
+      qos_profile: 10
 
-      image_rgb: /fbot_vision/bvb/image_rgb
-      camera_info: /fbot_vision/bvb/camera_info
-      image_depth: /fbot_vision/bvb/image_depth
+      image_rgb: /fbot_vision/camera/color/image_raw
+      camera_info: /fbot_vision/camera/color/camera_info
+      image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
 
     services:
     
@@ -27,27 +27,27 @@ yolo_tracker_recognition:
 
       debug:
         topic: /fbot_vision/fr/debug
-        queue_size: 1
+        qos_profile: 10
 
       recognition:
         topic: /fbot_vision/fr/recognition2D
-        queue_size: 1
+        qos_profile: 10
       
       recognition3D:
         topic: /fbot_vision/fr/recognition3D
-        queue_size: 1
+        qos_profile: 10
       
       tracking:
         topic: /fbot_vision/pt/tracking2D
-        queue_size: 1
+        qos_profile: 10
       
       tracking3D:
         topic: /fbot_vision/pt/tracking3D
-        queue_size: 1
+        qos_profile: 10
       
       markers:
         topic: /fbot_vision/fr/markers
-        queue_size: 1
+        qos_profile: 10
 
     tracking:
       start_on_init: False
@@ -65,4 +65,4 @@ yolo_tracker_recognition:
         reid_feature_add: 0.7
         iou: 0.5
         max_time: 60
-        nax_age: 5
+        max_age: 5

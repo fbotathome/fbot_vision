@@ -2,37 +2,27 @@ yolov8_recognition:
   ros__parameters:
 
     threshold: 0.6
-
-    classes_by_category: '{"Drinks": ["Banana", "Coke", "Fanta", "Kuat", "Papaya", "Pithula"], 
-                          "Cleaning supplies": ["Cloth", "Soap", "SteelWool"], 
-                          "Pantry items": ["ToothPick", "Cappuccino", "Gelatin", "MilkCream", "TomatoSauce"], 
-                          "Fruits": ["Apple", "Kiwi", "Lemon", "Sicilian_Lemon"], 
-                          "Snacks": ["fillet", "Onion", "Pepperoni", "Wafer"]}'
       
     max_sizes:
         - [0.5, 0.5, 0.5]
 
-    model_file: larc_2024_best.pt
+    model_file: yolov8n.pt
 
     subscribers:
       
       slop: 0.2
-      qos_profile: 1
+      qos_profile: 10
 
-      image_rgb: /camera/camera/color/image_raw
-      camera_info: /camera/camera/color/camera_info
-      image_depth: /camera/camera/aligned_depth_to_color/image_raw
+      image_rgb: /fbot_vision/camera/color/image_raw
+      camera_info: /fbot_vision/camera/color/camera_info
+      image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
       
     publishers:
 
       object_recognition:
         topic: /fbot_vision/fr/object_recognition
-        qos_profile: 1
-      
-      people_detection:
-        topic: /fbot_vision/fr/people_detection
-        qos_profile: 1
+        qos_profile: 10
 
       debug:
-        topic: /fbot_vision/fr/debug
-        qos_profile: 1
+        topic: /fbot_vision/fr/object_debug
+        qos_profile: 10

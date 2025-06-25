@@ -11,15 +11,19 @@ import time
 from ament_index_python.packages import get_package_share_directory
 from collections import Counter
 import pickle
+import copy
+from image2world.image2worldlib import *
 
 from fbot_recognition import BaseRecognition
 
+import rclpy.logging
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 import rclpy.wait_for_message
 
@@ -42,9 +46,10 @@ class FaceRecognition(BaseRecognition):
     def initRosComm(self):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
-        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB)
+        service_cb_group = ReentrantCallbackGroup()
+        self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         super().initRosComm(callbackObject=self)
-
+        
     def loadModel(self):
         pass
 
@@ -91,12 +96,34 @@ class FaceRecognition(BaseRecognition):
                 detection.bbox2d.size_x = float(bottom-top)
                 detection.bbox2d.size_y = float(right-left)
 
+                bb2d = BoundingBox2D()
+                data = BoundingBoxProcessingData()
+                data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+
+
+                data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
+                data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
+                data.boundingBox2D.size_x = float(bottom-top)
+                data.boundingBox2D.size_y = float(right-left)
+                data.maxSize.x = float(3)
+                data.maxSize.y = float(3)
+                data.maxSize.z = float(3)
+
+                bb2d = data.boundingBox2D
+        
+                try:
+                    bb3d = boundingBoxProcessing(data)
+                except Exception as e:
+                    self.get_logger().error(f"Error processing bounding box: {e}")
+                    continue
+
                 cv2.rectangle(debugImg, (left, top), (right, bottom), (0, 255, 0), 2)
                 
                 font = cv2.FONT_HERSHEY_DUPLEX
                 cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
-               
-                faceRecognitions.detections.append(detection)
+                detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
+                if detection3d is not None:
+                    faceRecognitions.detections.append(detection3d)
 
             self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8'))
 
@@ -104,7 +131,7 @@ class FaceRecognition(BaseRecognition):
                 self.faceRecognitionPublisher.publish(faceRecognitions)
         except KeyError as e:
             while True:
-                rospy.logwarn(f"callback error {e}")
+                self.get_logger().warning(f"callback error {e}")
 
     def declareParameters(self):
         self.declare_parameter("publishers.debug.qos_profile", 1)
@@ -164,7 +191,7 @@ class FaceRecognition(BaseRecognition):
             while True:
                 self.get_logger().warning(f"Flatten error {e}")
 
-    def encodeFaces(self, faceBBs, faceImage):
+    def encodeFaces(self, faceBoundingBoxes, faceImage):
 
         encodings = []
         names = []
@@ -184,7 +211,7 @@ class FaceRecognition(BaseRecognition):
 
                     largestFace = None
                     largestArea = -float('inf')
-                    for top, right, bottom, left in faceBBs:
+                    for top, right, bottom, left in faceBoundingBoxes:
                         area = (bottom - top)*(right - left)
                         if area > largestArea:
                             largestArea = area
@@ -201,7 +228,7 @@ class FaceRecognition(BaseRecognition):
                         else:
                             encodedFace[person].append(faceEncoding)
                     else:
-                        print(person + "/" + personImg + " was skipped and can't be used for training")
+                        self.get_logger().warning(person + "/" + personImg + " was skipped and can't be used for training")
             else:
                 pass
         self.saveVar(encodedFace, 'features')             
@@ -215,7 +242,7 @@ class FaceRecognition(BaseRecognition):
         os.makedirs(self.featuresPath, exist_ok=True)
         imageType = '.jpg'
 
-        faceBBs=[]
+        faceBoundingBoxes=[]
 
         imageLabels = os.listdir(dirName)
         addImageLabels = []
@@ -240,8 +267,7 @@ class FaceRecognition(BaseRecognition):
             self.regressiveCounter(peopleIntroducingRequest.interval)
             
             try:
-                # _,image = rclpy.wait_for_message.wait_for_message(Image, self, self.topicsToSubscribe['image_rgb'])
-                _,faceMessage = rclpy.wait_for_message.wait_for_message(Detection3DArray, self, self.faceRecognitionTopic)
+                faceMessage = self.last_detection
                 image = faceMessage.image_rgb
                 cvImage = self.cvBridge.imgmsg_to_cv2(image)
                 cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
@@ -256,14 +282,10 @@ class FaceRecognition(BaseRecognition):
                     right = int(faceInfos.pose[1].x)
                     bottom = int(faceInfos.pose[1].y)
                     left = int(faceInfos.pose[0].x)
-                    facesBbox.append((top, right, bottom, left))
+                    faceBoundingBoxes.append((top, right, bottom, left))
 
-            if len(facesBbox) > 0:
+            if len(faceBoundingBoxes) > 0:
 
-            # faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
-                
-            # if len(faceLocations) > 0:
-                
                 cv2.imwrite(os.path.join(dirName, addImageLabels[i]), cvImage)
                 self.get_logger().warning('Picture ' + addImageLabels[i] + ' was  saved.')
                 i+= 1
@@ -274,19 +296,29 @@ class FaceRecognition(BaseRecognition):
         
         peopleIntroducingResponse.response = True
 
-        self.encodeFaces(facesBbox, cvImage)
+        self.encodeFaces(faceBoundingBoxes, cvImage)
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
         return peopleIntroducingResponse
+    
+    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str) -> Detection3D:
+        detection3d = Detection3D()
+        detection3d.header = detectionHeader
+        detection3d.id = 0
+        detection3d.label = label
+        detection3d.bbox2d = copy.deepcopy(bb2d)
+        detection3d.bbox3d = copy.deepcopy(bb3d)
+
+        return detection3d
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = FaceRecognition()
-    
-    rclpy.spin(node)
-    node.destroy_node()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.spin()
     rclpy.shutdown()
 
 if __name__ == '__main__':
