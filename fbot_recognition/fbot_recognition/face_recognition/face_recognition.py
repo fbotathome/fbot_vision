@@ -60,7 +60,7 @@ class FaceRecognition(BaseRecognition):
         try:
             faceRecognitions = Detection3DArray()
             faceRecognitions.header = imageMsg.header
-            faceRecognitions.image_rgb = imageMsg 
+            faceRecognitions.image_rgb = copy.deepcopy(imageMsg) 
         
             cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg)
 
@@ -129,6 +129,7 @@ class FaceRecognition(BaseRecognition):
 
             if len(faceRecognitions.detections) > 0:
                 self.faceRecognitionPublisher.publish(faceRecognitions)
+                self.last_detection = faceRecognitions
         except KeyError as e:
             while True:
                 self.get_logger().warning(f"callback error {e}")
@@ -257,13 +258,14 @@ class FaceRecognition(BaseRecognition):
         i = 0
         while len(addImageLabels) < numImages:
             if i < len(existingNumbers) and existingNumbers[i] == currentIndex:
-                i += 1  
+                i += 1
             else:
                 addImageLabels.append(str(currentIndex) + imageType)  
             currentIndex += 1
 
         i = 0
         while i < numImages:
+            self.get_logger().info(f'Taking picture {i+1} of {numImages} for {name}...')
             self.regressiveCounter(peopleIntroducingRequest.interval)
             
             try:
@@ -272,20 +274,18 @@ class FaceRecognition(BaseRecognition):
                 cvImage = self.cvBridge.imgmsg_to_cv2(image)
                 cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
             except (Exception) as e:
-                break
-            
+                continue
 
             for faceInfos in faceMessage.detections:
 
                 if faceInfos.label == 'unknown':
-                    top = int(faceInfos.pose[0].y)
-                    right = int(faceInfos.pose[1].x)
-                    bottom = int(faceInfos.pose[1].y)
-                    left = int(faceInfos.pose[0].x)
+                    top = int(faceInfos.bbox2d.center.position.y - faceInfos.bbox2d.size_y / 2)
+                    right = int(faceInfos.bbox2d.center.position.x + faceInfos.bbox2d.size_x / 2)
+                    bottom = int(faceInfos.bbox2d.center.position.y + faceInfos.bbox2d.size_y / 2)
+                    left = int(faceInfos.bbox2d.center.position.x - faceInfos.bbox2d.size_x / 2)
                     faceBoundingBoxes.append((top, right, bottom, left))
 
-            if len(faceBoundingBoxes) > 0:
-
+            if len(faceBoundingBoxes) > 0:                
                 cv2.imwrite(os.path.join(dirName, addImageLabels[i]), cvImage)
                 self.get_logger().warning('Picture ' + addImageLabels[i] + ' was  saved.')
                 i+= 1
@@ -294,9 +294,8 @@ class FaceRecognition(BaseRecognition):
 
         cv2.destroyAllWindows()
         
-        peopleIntroducingResponse.response = True
-
         self.encodeFaces(faceBoundingBoxes, cvImage)
+        peopleIntroducingResponse.response = True
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
