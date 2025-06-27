@@ -98,8 +98,6 @@ class YoloTrackerRecognition(BaseRecognition):
         return resp
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
-
-        self.get_logger().error("Callback called")
         tracking = self.tracking
 
         img = imageMsg
@@ -266,7 +264,7 @@ class YoloTrackerRecognition(BaseRecognition):
             except Exception as e:
                 self.get_logger().warn(str(e))
                 continue
-            if np.linalg.norm([bbox3D.pose.position.x,bbox3D.pose.position.y,bbox3D.pose.position.z]) < 0.1:
+            if np.linalg.norm([bbox3D.center.position.x,bbox3D.center.position.y,bbox3D.center.position.z]) < 0.1:
                 continue
             pose3D = []
 
