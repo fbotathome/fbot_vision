@@ -53,8 +53,6 @@ class YoloV8Recognition(BaseRecognition):
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
-        self.get_logger().info("=> Entering callback ")
-
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
             self.get_logger().error("One or more input messages are invalid.")
             return
