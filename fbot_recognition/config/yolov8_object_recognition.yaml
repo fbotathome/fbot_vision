@@ -4,7 +4,7 @@ yolov8_recognition:
     threshold: 0.6
       
     max_sizes:
-        - [0.5, 0.5, 0.5]
+        - [0.05, 0.05, 0.05]
 
     model_file: yolov8n.pt
 
