@@ -10,7 +10,7 @@ from copy import deepcopy
 
 from ultralytics import YOLO
 from ReIDManager import ReIDManager
-from image2world import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
+from image2world.image2worldlib import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
 from fbot_recognition import BaseRecognition
 import numpy as np
 
@@ -60,13 +60,16 @@ class YoloTrackerRecognition(BaseRecognition):
     def loadTrackerModel(self):
         if self.reid_manager != None:
             return
+        self.get_logger().info("ANTES REID")
         self.reid_manager = ReIDManager(
             self.reid_model_file,
             self.reid_model_name,
             self.reid_threshold,
             self.reid_add_feature_threshold,
-            self.reid_img_size
+            self.reid_img_size,
+            device="cuda:0" if torch.cuda.is_available() else "cpu"
         )
+        self.get_logger().info("DEPOIS REID")
 
     def unLoadModel(self):
         del self.model
@@ -92,6 +95,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.tracking = False
         self.unLoadTrackerModel()
         self.get_logger().info("Tracking stoped!!!")
+        return resp
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         tracking = self.tracking
@@ -125,7 +129,7 @@ class YoloTrackerRecognition(BaseRecognition):
             results = list(self.model.track(img, persist=True,
                                         conf=self.det_threshold,
                                         iou=self.iou_threshold,
-                                        device="cuda:0",
+                                        device="cuda:0" if torch.cuda.is_available() else "cpu",
                                         tracker=self.tracker_cfg_file,
                                         verbose=True, stream=True))
             bboxs = results[0].boxes.data.cpu().numpy()
@@ -147,7 +151,8 @@ class YoloTrackerRecognition(BaseRecognition):
             img_patchs = []
             for x1,y1,x2,y2 in results[0].boxes.xyxy.cpu().numpy():
                 img_patchs.append(img[int(y1):int(y2),int(x1):int(x2)])
-            ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+            # ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+            ids = results[0].boxes.id.cpu().numpy()
         for i, box in enumerate(bboxs):
             description = Detection2D()
             description.header = HEADER
@@ -258,6 +263,8 @@ class YoloTrackerRecognition(BaseRecognition):
                 bbox3D = boundingBoxProcessing(data)
             except Exception as e:
                 self.get_logger().warn(str(e))
+                continue
+            if np.linalg.norm([bbox3D.center.position.x,bbox3D.center.position.y,bbox3D.center.position.z]) < 0.1:
                 continue
             pose3D = []
 
