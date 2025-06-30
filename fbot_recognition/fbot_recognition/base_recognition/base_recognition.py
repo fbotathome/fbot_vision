@@ -10,9 +10,9 @@ from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
 SOURCES_TYPES = {
-        'camera_info': CameraInfo,
+        # 'camera_info': CameraInfo,
         'image_rgb': Image,
-        'image_depth': Image
+        # 'image_depth': Image
     }
 
 DEFAULT_TOPICS = {

@@ -36,12 +36,11 @@ from redis.commands.search.field import (
 from redis.commands.search.index_definition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 
-from deepface.commons import functions
+# from deepface.commons import functions
 from tqdm import tqdm
 from deepface import DeepFace
 
-import uuid
-
+from uuid import uuid4
 
 class FaceRecognition(BaseRecognition):
     def __init__(self):
@@ -65,15 +64,68 @@ class FaceRecognition(BaseRecognition):
         self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
         service_cb_group = ReentrantCallbackGroup()
         self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
+        self.last_detection = None
+        # self.camera_subscription = self.create_subscription(
+        #     Image, 
+        #     self.topicsToSubscribe['image_rgb'], 
+        #     self.callback, 
+        #     qos_profile=self.qosProfile
+        # )
         super().initRosComm(callbackObject=self)
     
     def peopleIntroducingCB(self, req: PeopleIntroducing.Request, res: PeopleIntroducing.Response):
-        self.get_logger().info('FaceRecognition').info(f"Received introduce person request: {req.name}")
+        self.get_logger().info(f"Received introduce person request: {req.name}")
+        
+        name = req.name
+        num_images = req.num_images
+        
+        previous_detection = None
+        face_embeddings = []
+        for idx in range(num_images):
+            self.get_logger().info(f'Taking picture {idx+1} of {num_images} for {name}...')
+            self.regressiveCounter(req.interval)
+            num_retries = 3
+            retry_count = 0
+            while self.last_detection == previous_detection and retry_count < num_retries:
+                self.get_logger().info("Waiting for new face detection...")
+                self.regressiveCounter(1)
+                retry_count += 1
+            if retry_count >= num_retries:
+                self.get_logger().warning("No new face detection found, skipping this image.")
+                continue
+
+            previous_detection = self.last_detection
+
+            face_detection = None
+            for detection in self.last_detection.detections:
+                if detection.label == 'unknown':
+                    face_detection = detection
+                    break
+            if not face_detection:
+                self.get_logger().warn("No unknown face detection found, skipping this image.")
+                continue
+            
+            face_embedding = face_detection.embedding
+            if not face_embedding:
+                self.get_logger().warn("No face embedding found, skipping this image.")
+                continue
+            face_embeddings.append(face_embedding)
+            self.get_logger().info(f"Appending face embedding {idx} for {name}.")
+        
+        try:
+            res.uuid = self.storeFaceEmbeddings(name, face_embeddings)
+            res.response = True
+            self.get_logger().info(f"Face embedding for {name} with stored successfully.")
+        except ValueError as e:
+            self.get_logger().error(f"Error storing face embeddings for {name}: {e}")
+            res.response = False
+            res.uuid = ''
+    
         return res
 
-    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+    def callback(self, imageMsg: Image):
         
-        self.get_logger().info('FaceRecognition').info("Face recognition callback triggered")
+        self.get_logger().info("Face recognition callback triggered")
 
         face_recognitions = Detection3DArray()
         face_recognitions.header = imageMsg.header
@@ -81,29 +133,36 @@ class FaceRecognition(BaseRecognition):
         cv_image = self.cvBridge.imgmsg_to_cv2(imageMsg, desired_encoding="bgr8")
         debug_image = self.cvBridge.imgmsg_to_cv2(imageMsg) 
 
-        face_detections = DeepFace.represent(
-            img_path=cv_image,
-            model_name=self.deepface_model_name,
-            enforce_detection=False
-        )
+        try:
+            face_detections = DeepFace.represent(
+                img_path=cv_image,
+                model_name=self.deepface_model_name,
+                detector_backend= self.deepface_detector_backend,
+            )
+        except ValueError as e:
+            face_detections = []
 
         names = []
-        nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections])
+        if len(face_detections) > 0:
+            nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections])
 
         for idx, face_detection in enumerate(face_detections):
-            uuid_str = str(uuid.uuid4())
             top, left = face_detection['facial_area']['y'], face_detection['facial_area']['x']
             right = left + face_detection['facial_area']['w']
             bottom = top + face_detection['facial_area']['h']
             confidence = face_detection['face_confidence']
-            embedding = face_detection['embedding']
 
             detection = Detection3D()
-            name = nearest_neighbours[idx]['name']
-            uuid = nearest_neighbours[idx]['uuid']
+            if not nearest_neighbours[idx]:
+                name = 'unknown'
+                uuid = ''
+            else:
+                name = nearest_neighbours[idx]['name']
+                uuid = nearest_neighbours[idx]['uuid']
 
             detection.label = name
             detection.uuid = uuid
+            detection.embedding = face_detection['embedding']
             names.append(name)
 
             detectionHeader = imageMsg.header
@@ -115,32 +174,32 @@ class FaceRecognition(BaseRecognition):
             detection.bbox2d.size_x = float(bottom-top)
             detection.bbox2d.size_y = float(right-left)
 
-            bb2d = BoundingBox2D()
-            data = BoundingBoxProcessingData()
-            data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+            # bb2d = BoundingBox2D()
+            # data = BoundingBoxProcessingData()
+            # data.sensor.setSensorData(cameraInfoMsg, depthMsg)
 
 
-            data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
-            data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
-            data.boundingBox2D.size_x = float(bottom-top)
-            data.boundingBox2D.size_y = float(right-left)
-            data.maxSize.x = float(3)
-            data.maxSize.y = float(3)
-            data.maxSize.z = float(3)
+            # data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
+            # data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
+            # data.boundingBox2D.size_x = float(bottom-top)
+            # data.boundingBox2D.size_y = float(right-left)
+            # data.maxSize.x = float(3)
+            # data.maxSize.y = float(3)
+            # data.maxSize.z = float(3)
 
-            bb2d = data.boundingBox2D
+            # bb2d = data.boundingBox2D
     
-            try:
-                bb3d = boundingBoxProcessing(data)
-            except Exception as e:
-                self.get_logger().error(f"Error processing bounding box: {e}")
-                continue
+            # try:
+            #     bb3d = boundingBoxProcessing(data)
+            # except Exception as e:
+            #     self.get_logger().error(f"Error processing bounding box: {e}")
+            #     continue
 
             cv2.rectangle(debug_image, (left, top), (right, bottom), (0, 255, 0), 2)
             
             font = cv2.FONT_HERSHEY_DUPLEX
             cv2.putText(debug_image, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
-            detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
+            detection3d = detection #self.createDetection3d(bb2d, bb3d, detectionHeader, name)
             if detection3d is not None:
                 face_recognitions.detections.append(detection3d)
 
@@ -152,13 +211,14 @@ class FaceRecognition(BaseRecognition):
 
 
     def configureRedis(self):
-        self.get_logger().info('FaceRecognition').info("Configuring Redis for face recognition")
+        self.get_logger().info("Configuring Redis for face recognition")
         self.redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
         self.index_name = "face_recognition_index"
 
-        self.deepface_model_name  = 'Facenet512'
-        self.distance_metric = 'COSINE' # 'L2', 'IP' OR 'COSINE'
+        self.deepface_model_name = 'Facenet512'
         self.embedding_dim = 512
+        self.deepface_detector_backend = 'yolov8'
+        self.distance_metric = 'COSINE'  # 'L2', 'IP' OR 'COSINE'
 
         # Define the schema for the index
         schema = (
@@ -170,7 +230,7 @@ class FaceRecognition(BaseRecognition):
                 {
                     "TYPE": "FLOAT32", 
                     "DIM": self.embedding_dim, 
-                    "DISTANCE_METRIC": "COSINE"
+                    "DISTANCE_METRIC": self.distance_metric
                     }
             ),
         )
@@ -178,29 +238,65 @@ class FaceRecognition(BaseRecognition):
         # Check if the index already exists
         try:
             self.redis_client.ft(self.index_name).info()
-            self.get_logger().info('FaceRecognition').info("Redis index already exists.")
+            self.get_logger().info("Redis index already exists.")
+            # Verify if the existing index matches the defined schema
+            index_info = self.redis_client.ft(self.index_name).info()
+            self.get_logger().info(f"Current index info: {index_info['attributes']}")
+
+            for attribute in index_info["attributes"]:
+                if 'embedding' in attribute and 'VECTOR' in attribute:
+                    if (not self.embedding_dim in attribute) or (not self.distance_metric in attribute): 
+                        self.get_logger().info("Redis index schema mismatch, deleting and recreating the index.")
+                        self.redis_client.ft(self.index_name).dropindex(delete_documents=True)
+                        self.redis_client.ft(self.index_name).create_index(fields=schema, definition=definition)
+                    break
         except redis.exceptions.ResponseError:
-            self.get_logger().info('FaceRecognition').info("Redis index does not exist, creating it.")
+            self.get_logger().info("Redis index does not exist, creating it.")
             self.redis_client.ft(self.index_name).create_index(fields=schema, definition=definition)
         
         info = self.redis_client.ft(self.index_name).info()
-        self.get_logger().info('FaceRecognition').info(f"Redis index info: {info}")
+        self.get_logger().info(f"Redis index created. It has {info['num_docs']} documents.")
+        # Delete existing documents in the Redis index
+        # self.get_logger().info("Deleting existing documents in Redis index.")
+        
+        
+        # try:
+        #     keys = self.redis_client.keys("faces:*")
+        #     if keys:
+        #         self.redis_client.delete(*keys)
+        #         self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
+        #     else:
+        #         self.get_logger().info("No existing documents found in Redis index.")
+        # except Exception as e:
+        #     self.get_logger().error(f"Error while deleting existing documents: {e}")
 
-    def storeFaceEmbedding(self, uuid, name, embedding):
-        self.get_logger().info('FaceRecognition').info(f"Storing face embedding for {name} with UUID {uuid}.")
-        embedding_list = embedding.tolist()
-        # Create a dictionary for the face data
-        face_data = {
-            "uuid": uuid,
-            "name": name,
-            "embedding": embedding_list
-        }
-        # Store the face data in Redis
-        self.redis_client.hset(f"faces:{uuid}", mapping=face_data)
-        self.get_logger().info('FaceRecognition').info(f"Stored face embedding for {name} with UUID {uuid}.")
+    def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10):
+        uuid = str(uuid4())
+        self.get_logger().info(f"Storing face embedding for {name} with UUID {uuid}.")
+        
+        if not embeddings or len(embeddings) == 0:
+            self.get_logger().warning(f"No embeddings provided for {name}. Skipping storage.")
+            raise ValueError("No embeddings provided for storage.")
+            
+        
+        for idx, embedding in enumerate(embeddings):
+            if len(embedding) != self.embedding_dim:
+                raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {len(embedding)}")
+            
+            face_data = {
+                "uuid": uuid,
+                "name": name,
+                "embedding": np.array(embedding, dtype=np.float32).tobytes()  # Convert embedding to bytes
+            }
+            redis_key = f"faces:{uuid}:{idx}"
+            num_fields = self.redis_client.hset(redis_key, mapping=face_data)
+            self.redis_client.expire(redis_key, ttl)
+            self.get_logger().info(f"Stored face info with {num_fields} fields for {name} with UUID {uuid}:{idx} in Redis.")
+        
+        return uuid
     
     def searchKNN(self, embeddings, k=1):
-        self.get_logger().info('FaceRecognition').info(f"Searching for {k} nearest neighbours for the provided embeddings.")
+        self.get_logger().info(f"Searching for {k} nearest neighbours for the provided embeddings.")
         if not isinstance(embeddings, list):
             embeddings = [embeddings]
         if not embeddings:
@@ -226,6 +322,10 @@ class FaceRecognition(BaseRecognition):
             embedding_result = []
             for doc in result:
                 score = round(1 - float(doc.score), 2)
+                self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
+                if score < self.threshold:
+                    self.get_logger().info(f"Score {score} is below threshold {self.threshold}, skipping {doc.name}.")
+                    continue
                 embedding_result.append({
                     "uuid": doc.uuid,
                     "name": doc.name,
