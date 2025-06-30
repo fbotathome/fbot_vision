@@ -23,6 +23,7 @@ from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 import rclpy.wait_for_message
 
@@ -45,9 +46,10 @@ class FaceRecognition(BaseRecognition):
     def initRosComm(self):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
-        self.introducePersonService = self.create_service(PeopleIntroducing, self.introducePersonServername, self.peopleIntroducingCB)
+        service_cb_group = ReentrantCallbackGroup()
+        self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         super().initRosComm(callbackObject=self)
-
+        
     def loadModel(self):
         pass
 
@@ -58,7 +60,7 @@ class FaceRecognition(BaseRecognition):
         try:
             faceRecognitions = Detection3DArray()
             faceRecognitions.header = imageMsg.header
-            faceRecognitions.image_rgb = imageMsg 
+            faceRecognitions.image_rgb = copy.deepcopy(imageMsg) 
         
             cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg)
 
@@ -127,6 +129,7 @@ class FaceRecognition(BaseRecognition):
 
             if len(faceRecognitions.detections) > 0:
                 self.faceRecognitionPublisher.publish(faceRecognitions)
+                self.last_detection = faceRecognitions
         except KeyError as e:
             while True:
                 self.get_logger().warning(f"callback error {e}")
@@ -255,40 +258,34 @@ class FaceRecognition(BaseRecognition):
         i = 0
         while len(addImageLabels) < numImages:
             if i < len(existingNumbers) and existingNumbers[i] == currentIndex:
-                i += 1  
+                i += 1
             else:
                 addImageLabels.append(str(currentIndex) + imageType)  
             currentIndex += 1
 
         i = 0
         while i < numImages:
+            self.get_logger().info(f'Taking picture {i+1} of {numImages} for {name}...')
             self.regressiveCounter(peopleIntroducingRequest.interval)
             
             try:
-                # _,image = rclpy.wait_for_message.wait_for_message(Image, self, self.topicsToSubscribe['image_rgb'])
-                _,faceMessage = rclpy.wait_for_message.wait_for_message(Detection3DArray, self, self.faceRecognitionTopic)
+                faceMessage = self.last_detection
                 image = faceMessage.image_rgb
                 cvImage = self.cvBridge.imgmsg_to_cv2(image)
                 cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
             except (Exception) as e:
-                break
-            
+                continue
 
             for faceInfos in faceMessage.detections:
 
                 if faceInfos.label == 'unknown':
-                    top = int(faceInfos.pose[0].y)
-                    right = int(faceInfos.pose[1].x)
-                    bottom = int(faceInfos.pose[1].y)
-                    left = int(faceInfos.pose[0].x)
+                    top = int(faceInfos.bbox2d.center.position.y - faceInfos.bbox2d.size_y / 2)
+                    right = int(faceInfos.bbox2d.center.position.x + faceInfos.bbox2d.size_x / 2)
+                    bottom = int(faceInfos.bbox2d.center.position.y + faceInfos.bbox2d.size_y / 2)
+                    left = int(faceInfos.bbox2d.center.position.x - faceInfos.bbox2d.size_x / 2)
                     faceBoundingBoxes.append((top, right, bottom, left))
 
-            if len(faceBoundingBoxes) > 0:
-
-            # faceLocations = face_recognition.face_locations(cvImage, model='yolov8')
-                
-            # if len(faceLocations) > 0:
-                
+            if len(faceBoundingBoxes) > 0:                
                 cv2.imwrite(os.path.join(dirName, addImageLabels[i]), cvImage)
                 self.get_logger().warning('Picture ' + addImageLabels[i] + ' was  saved.')
                 i+= 1
@@ -297,9 +294,8 @@ class FaceRecognition(BaseRecognition):
 
         cv2.destroyAllWindows()
         
-        peopleIntroducingResponse.response = True
-
         self.encodeFaces(faceBoundingBoxes, cvImage)
+        peopleIntroducingResponse.response = True
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
@@ -319,9 +315,9 @@ class FaceRecognition(BaseRecognition):
 def main(args=None):
     rclpy.init(args=args)
     node = FaceRecognition()
-    
-    rclpy.spin(node)
-    node.destroy_node()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.spin()
     rclpy.shutdown()
 
 if __name__ == '__main__':
