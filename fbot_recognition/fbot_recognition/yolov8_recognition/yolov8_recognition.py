@@ -4,7 +4,6 @@ import rclpy
 import copy
 import numpy as np
 import torch
-import ast
 
 from ultralytics import YOLO
 from PIL import Image as IMG
@@ -37,7 +36,7 @@ class YoloV8Recognition(BaseRecognition):
 
     def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
+        self.markerPublisher = self.create_publisher(MarkerArray, 'fbot_vision/fr/object_markers', qos_profile=self.debugQosProfile)
         self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
         super().initRosComm(callbackObject=self)
 
@@ -53,8 +52,6 @@ class YoloV8Recognition(BaseRecognition):
         self.model = None
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
-
-        self.get_logger().info("=> Entering callback ")
 
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
             self.get_logger().error("One or more input messages are invalid.")

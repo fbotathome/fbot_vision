@@ -23,13 +23,13 @@ def generate_launch_description():
     )
 
     config_file_arg = DeclareLaunchArgument(
-        'config',
+        'config_tracker',
         default_value=config_file_path,
         description='Path to the parameter file'
     )
 
     config_file_remote_arg = DeclareLaunchArgument(
-        'remote_config',
+        'remote_config_tracker',
         default_value=config_file_path_remote,
         description='Path to the parameter file'
     )
@@ -42,7 +42,7 @@ def generate_launch_description():
 
     launch_realsense_arg = DeclareLaunchArgument(
         'use_realsense',
-        default_value='true',
+        default_value='false',
         description="If should launch the camera node"
     )
 
@@ -51,7 +51,7 @@ def generate_launch_description():
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
         name='yolo_tracker_recognition',
-        parameters=[LaunchConfiguration('remote_config'),],
+        parameters=[LaunchConfiguration('remote_config_tracker'),],
         user='jetson',
         machine="jetson",
         source_paths=[
@@ -64,7 +64,7 @@ def generate_launch_description():
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
         name='yolo_tracker_recognition',
-        parameters=[LaunchConfiguration('config'),],
+        parameters=[LaunchConfiguration('config_tracker'),],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
@@ -73,7 +73,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
         ),
         launch_arguments={
-            'camera_name': 'realsense',
+            'camera_name': 'camera',
             'camera_namespace': 'fbot_vision',
             'enable_rgbd': 'true',
             'enable_sync': 'true',

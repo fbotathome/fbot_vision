@@ -27,14 +27,14 @@ def generate_launch_description():
     declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
-            'config',
+            'config_face',
             default_value=config_file_path,
             description='Path to the parameter file'
         ))
 
     declared_arguments.append(
         DeclareLaunchArgument(
-            'remote_config',
+            'remote_config_face',
             default_value=config_file_path_remote,
             description='Path to the remote parameter file'
         ))
@@ -56,7 +56,7 @@ def generate_launch_description():
         package='fbot_recognition',
         executable='face_recognition',
         name='face_recognition',
-        parameters=[LaunchConfiguration('remote_config'),],
+        parameters=[LaunchConfiguration('remote_config_face'),],
         user='jetson',
         machine="jetson",
         source_paths=[
@@ -69,7 +69,7 @@ def generate_launch_description():
         package='fbot_recognition',
         executable='face_recognition',
         name='face_recognition',
-        parameters=[LaunchConfiguration('config'),],
+        parameters=[LaunchConfiguration('config_face'),],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
@@ -78,7 +78,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
         ),
         launch_arguments={
-            'camera_name': 'realsense',
+            'camera_name': 'camera',
             'camera_namespace': 'fbot_vision',
             'enable_rgbd': 'true',
             'enable_sync': 'true',
