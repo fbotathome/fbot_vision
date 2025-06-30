@@ -41,7 +41,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             'use_remote',
-            default_value='true',
+            default_value='false',
             description="If it should run the node on remote"
         ))
     declared_arguments.append(
@@ -52,18 +52,18 @@ def generate_launch_description():
         ))
 
 
-    face_recognition_remote_node = NodeRemoteSSH(
-        package='fbot_recognition',
-        executable='face_recognition',
-        name='face_recognition',
-        parameters=[LaunchConfiguration('remote_config_face'),],
-        user='jetson',
-        machine="jetson",
-        source_paths=[
-            "/home/jetson/jetson_ws/install/setup.bash"
-        ],
-        condition=IfCondition(LaunchConfiguration('use_remote'))
-    )
+    # face_recognition_remote_node = NodeRemoteSSH(
+    #     package='fbot_recognition',
+    #     executable='face_recognition',
+    #     name='face_recognition',
+    #     parameters=[LaunchConfiguration('remote_config_face'),],
+    #     user='jetson',
+    #     machine="jetson",
+    #     source_paths=[
+    #         "/home/jetson/jetson_ws/install/setup.bash"
+    #     ],
+    #     condition=IfCondition(LaunchConfiguration('use_remote'))
+    # )
 
     face_recognition_node = Node(
         package='fbot_recognition',
@@ -73,27 +73,27 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-    realsense2_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
-        ),
-        launch_arguments={
-            'camera_name': 'camera',
-            'camera_namespace': 'fbot_vision',
-            'enable_rgbd': 'true',
-            'enable_sync': 'true',
-            'align_depth.enable': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'true'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_realsense'))
-    )
+    # realsense2_node = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+    #     ),
+    #     launch_arguments={
+    #         'camera_name': 'camera',
+    #         'camera_namespace': 'fbot_vision',
+    #         'enable_rgbd': 'true',
+    #         'enable_sync': 'true',
+    #         'align_depth.enable': 'true',
+    #         'enable_color': 'true',
+    #         'enable_depth': 'true',
+    #         'pointcloud.enable': 'true'
+    #     }.items(),
+    #     condition=IfCondition(LaunchConfiguration('use_realsense'))
+    # )
 
 
     return LaunchDescription([
         *declared_arguments,
-        face_recognition_remote_node,
+        # face_recognition_remote_node,
         face_recognition_node,
-        realsense2_node
+        # realsense2_node
     ])

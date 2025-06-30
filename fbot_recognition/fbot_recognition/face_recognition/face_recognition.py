@@ -1,13 +1,10 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import rclpy
 
-
-import numpy as np
 import os
 import cv2
-import face_recognition
+# import face_recognition
 import time
+
 from ament_index_python.packages import get_package_share_directory
 from collections import Counter
 import pickle
@@ -24,8 +21,26 @@ from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
 from rclpy.callback_groups import ReentrantCallbackGroup
-
 import rclpy.wait_for_message
+
+import numpy as np
+import pandas as pd
+import requests
+import redis
+from redis.commands.search.field import (
+    NumericField,
+    TagField,
+    TextField,
+    VectorField,
+)
+from redis.commands.search.index_definition import IndexDefinition, IndexType
+from redis.commands.search.query import Query
+
+from deepface.commons import functions
+from tqdm import tqdm
+from deepface import DeepFace
+
+import uuid
 
 
 class FaceRecognition(BaseRecognition):
@@ -37,8 +52,10 @@ class FaceRecognition(BaseRecognition):
         self.peopleDatasetPath = os.path.join(datasetPath, 'people/')
         self.declareParameters()
         self.readParameters()
-        self.loadModel()
         self.initRosComm()
+        
+        self.configureRedis()
+
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
@@ -49,90 +66,178 @@ class FaceRecognition(BaseRecognition):
         service_cb_group = ReentrantCallbackGroup()
         self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         super().initRosComm(callbackObject=self)
-        
-    def loadModel(self):
-        pass
-
-    def unLoadModel(self):
-        pass
+    
+    def peopleIntroducingCB(self, req: PeopleIntroducing.Request, res: PeopleIntroducing.Response):
+        self.get_logger().info('FaceRecognition').info(f"Received introduce person request: {req.name}")
+        return res
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+        
+        self.get_logger().info('FaceRecognition').info("Face recognition callback triggered")
+
+        face_recognitions = Detection3DArray()
+        face_recognitions.header = imageMsg.header
+        face_recognitions.image_rgb = copy.deepcopy(imageMsg) 
+        cv_image = self.cvBridge.imgmsg_to_cv2(imageMsg, desired_encoding="bgr8")
+        debug_image = self.cvBridge.imgmsg_to_cv2(imageMsg) 
+
+        face_detections = DeepFace.represent(
+            img_path=cv_image,
+            model_name=self.deepface_model_name,
+            enforce_detection=False
+        )
+
+        names = []
+        nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections])
+
+        for idx, face_detection in enumerate(face_detections):
+            uuid_str = str(uuid.uuid4())
+            top, left = face_detection['facial_area']['y'], face_detection['facial_area']['x']
+            right = left + face_detection['facial_area']['w']
+            bottom = top + face_detection['facial_area']['h']
+            confidence = face_detection['face_confidence']
+            embedding = face_detection['embedding']
+
+            detection = Detection3D()
+            name = nearest_neighbours[idx]['name']
+            uuid = nearest_neighbours[idx]['uuid']
+
+            detection.label = name
+            detection.uuid = uuid
+            names.append(name)
+
+            detectionHeader = imageMsg.header
+            detection.header = detectionHeader
+            size = int(right-left), int(bottom-top)
+            
+            detection.bbox2d.center.position.x = float(int(left) + int(size[1]/2))
+            detection.bbox2d.center.position.y = float(int(top) + int(size[0]/2))
+            detection.bbox2d.size_x = float(bottom-top)
+            detection.bbox2d.size_y = float(right-left)
+
+            bb2d = BoundingBox2D()
+            data = BoundingBoxProcessingData()
+            data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+
+
+            data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
+            data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
+            data.boundingBox2D.size_x = float(bottom-top)
+            data.boundingBox2D.size_y = float(right-left)
+            data.maxSize.x = float(3)
+            data.maxSize.y = float(3)
+            data.maxSize.z = float(3)
+
+            bb2d = data.boundingBox2D
+    
+            try:
+                bb3d = boundingBoxProcessing(data)
+            except Exception as e:
+                self.get_logger().error(f"Error processing bounding box: {e}")
+                continue
+
+            cv2.rectangle(debug_image, (left, top), (right, bottom), (0, 255, 0), 2)
+            
+            font = cv2.FONT_HERSHEY_DUPLEX
+            cv2.putText(debug_image, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
+            detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
+            if detection3d is not None:
+                face_recognitions.detections.append(detection3d)
+
+        self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debug_image), encoding='rgb8'))
+
+        if len(face_recognitions.detections) > 0:
+            self.faceRecognitionPublisher.publish(face_recognitions)
+            self.last_detection = face_recognitions
+
+
+    def configureRedis(self):
+        self.get_logger().info('FaceRecognition').info("Configuring Redis for face recognition")
+        self.redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        self.index_name = "face_recognition_index"
+
+        self.deepface_model_name  = 'Facenet512'
+        self.distance_metric = 'COSINE' # 'L2', 'IP' OR 'COSINE'
+        self.embedding_dim = 512
+
+        # Define the schema for the index
+        schema = (
+            TextField("uuid", no_stem=True),
+            TextField("name", no_stem=True),
+            VectorField(
+                "embedding", 
+                "FLAT", 
+                {
+                    "TYPE": "FLOAT32", 
+                    "DIM": self.embedding_dim, 
+                    "DISTANCE_METRIC": "COSINE"
+                    }
+            ),
+        )
+        definition = IndexDefinition(prefix=["faces:"])
+        # Check if the index already exists
         try:
-            faceRecognitions = Detection3DArray()
-            faceRecognitions.header = imageMsg.header
-            faceRecognitions.image_rgb = copy.deepcopy(imageMsg) 
+            self.redis_client.ft(self.index_name).info()
+            self.get_logger().info('FaceRecognition').info("Redis index already exists.")
+        except redis.exceptions.ResponseError:
+            self.get_logger().info('FaceRecognition').info("Redis index does not exist, creating it.")
+            self.redis_client.ft(self.index_name).create_index(fields=schema, definition=definition)
         
-            cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg)
+        info = self.redis_client.ft(self.index_name).info()
+        self.get_logger().info('FaceRecognition').info(f"Redis index info: {info}")
 
-            currentFaces = face_recognition.face_locations(cvImage, model = 'yolov8')
-            currentFacesEncoding = face_recognition.face_encodings(cvImage, currentFaces)
-
-            debugImg = cvImage
-            names = []
-            nameDistance=[]
-            for idx in range(len(currentFacesEncoding)):
-                currentEncoding = currentFacesEncoding[idx]
-                top, right, bottom, left = currentFaces[idx]
-                detection = Detection3D()
-                name = 'unknown'
-                if(len(self.knownFaces[0]) > 0):
-                    faceDistances = np.linalg.norm(self.knownFaces[1] - currentEncoding, axis = 1)
-                    faceDistanceMinIndex = np.argmin(faceDistances)
-                    minDistance = faceDistances[faceDistanceMinIndex]
-
-                    if minDistance < self.threshold:
-                        name = (self.knownFaces[0][faceDistanceMinIndex])
-                detection.label = name
-
-                names.append(name)
-
-                detectionHeader = imageMsg.header
-
-                detection.header = detectionHeader
-                size = int(right-left), int(bottom-top)
-                
-                detection.bbox2d.center.position.x = float(int(left) + int(size[1]/2))
-                detection.bbox2d.center.position.y = float(int(top) + int(size[0]/2))
-                detection.bbox2d.size_x = float(bottom-top)
-                detection.bbox2d.size_y = float(right-left)
-
-                bb2d = BoundingBox2D()
-                data = BoundingBoxProcessingData()
-                data.sensor.setSensorData(cameraInfoMsg, depthMsg)
-
-
-                data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
-                data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
-                data.boundingBox2D.size_x = float(bottom-top)
-                data.boundingBox2D.size_y = float(right-left)
-                data.maxSize.x = float(3)
-                data.maxSize.y = float(3)
-                data.maxSize.z = float(3)
-
-                bb2d = data.boundingBox2D
+    def storeFaceEmbedding(self, uuid, name, embedding):
+        self.get_logger().info('FaceRecognition').info(f"Storing face embedding for {name} with UUID {uuid}.")
+        embedding_list = embedding.tolist()
+        # Create a dictionary for the face data
+        face_data = {
+            "uuid": uuid,
+            "name": name,
+            "embedding": embedding_list
+        }
+        # Store the face data in Redis
+        self.redis_client.hset(f"faces:{uuid}", mapping=face_data)
+        self.get_logger().info('FaceRecognition').info(f"Stored face embedding for {name} with UUID {uuid}.")
+    
+    def searchKNN(self, embeddings, k=1):
+        self.get_logger().info('FaceRecognition').info(f"Searching for {k} nearest neighbours for the provided embeddings.")
+        if not isinstance(embeddings, list):
+            embeddings = [embeddings]
+        if not embeddings:
+            return None
+        # Convert embeddings to a list of lists
         
-                try:
-                    bb3d = boundingBoxProcessing(data)
-                except Exception as e:
-                    self.get_logger().error(f"Error processing bounding box: {e}")
-                    continue
+        query = (
+            Query(f"*=>[KNN {k} @embedding $vec AS score]")
+            .sort_by("score")
+            .return_fields("uuid", "name", "score")#.paging(0, k).bf("1.0")
+            .dialect(2)
+        )
+        results_list = []
+        for i, embedding in enumerate(embeddings):
+            if len(embedding) != self.embedding_dim:
+                raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {len(embedding)}")
+            result = (
+                self.redis_client.ft(self.index_name).search(
+                    query,
+                    query_params={"vec": np.array(embedding, dtype=np.float32).tobytes()}
+                )
+            ).docs
+            embedding_result = []
+            for doc in result:
+                score = round(1 - float(doc.score), 2)
+                embedding_result.append({
+                    "uuid": doc.uuid,
+                    "name": doc.name,
+                    "score": score
+                })
+            results_list.append(embedding_result)
 
-                cv2.rectangle(debugImg, (left, top), (right, bottom), (0, 255, 0), 2)
-                
-                font = cv2.FONT_HERSHEY_DUPLEX
-                cv2.putText(debugImg, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
-                detection3d = self.createDetection3d(bb2d, bb3d, detectionHeader, name)
-                if detection3d is not None:
-                    faceRecognitions.detections.append(detection3d)
+        #TODO: CHOOSE CHEAPER COMBINATION OF THE NEIGHBOURS FOUND
 
-            self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debugImg), encoding='rgb8'))
+        first_results = [embedding_result[0] if embedding_result else None for embedding_result in results_list]
+        return first_results
 
-            if len(faceRecognitions.detections) > 0:
-                self.faceRecognitionPublisher.publish(faceRecognitions)
-                self.last_detection = faceRecognitions
-        except KeyError as e:
-            while True:
-                self.get_logger().warning(f"callback error {e}")
 
     def declareParameters(self):
         self.declare_parameter("publishers.debug.qos_profile", 1)
@@ -232,75 +337,8 @@ class FaceRecognition(BaseRecognition):
                         self.get_logger().warning(person + "/" + personImg + " was skipped and can't be used for training")
             else:
                 pass
-        self.saveVar(encodedFace, 'features')             
+        self.saveVar(encodedFace, 'features')    
 
-
-    def peopleIntroducingCB(self, peopleIntroducingRequest, peopleIntroducingResponse):
-        name = peopleIntroducingRequest.name
-        numImages = peopleIntroducingRequest.num_images
-        dirName = os.path.join(self.peopleDatasetPath, name)
-        os.makedirs(dirName, exist_ok=True)
-        os.makedirs(self.featuresPath, exist_ok=True)
-        imageType = '.jpg'
-
-        faceBoundingBoxes=[]
-
-        imageLabels = os.listdir(dirName)
-        addImageLabels = []
-        currentIndex = 1
-        existingNumbers = [] 
-
-        for label in imageLabels:
-            existingNumbers.append(int(label.replace(imageType, '')))
-
-        existingNumbers.sort()
-
-        i = 0
-        while len(addImageLabels) < numImages:
-            if i < len(existingNumbers) and existingNumbers[i] == currentIndex:
-                i += 1
-            else:
-                addImageLabels.append(str(currentIndex) + imageType)  
-            currentIndex += 1
-
-        i = 0
-        while i < numImages:
-            self.get_logger().info(f'Taking picture {i+1} of {numImages} for {name}...')
-            self.regressiveCounter(peopleIntroducingRequest.interval)
-            
-            try:
-                faceMessage = self.last_detection
-                image = faceMessage.image_rgb
-                cvImage = self.cvBridge.imgmsg_to_cv2(image)
-                cvImage = cv2.cvtColor(cvImage, cv2.COLOR_BGR2RGB)
-            except (Exception) as e:
-                continue
-
-            for faceInfos in faceMessage.detections:
-
-                if faceInfos.label == 'unknown':
-                    top = int(faceInfos.bbox2d.center.position.y - faceInfos.bbox2d.size_y / 2)
-                    right = int(faceInfos.bbox2d.center.position.x + faceInfos.bbox2d.size_x / 2)
-                    bottom = int(faceInfos.bbox2d.center.position.y + faceInfos.bbox2d.size_y / 2)
-                    left = int(faceInfos.bbox2d.center.position.x - faceInfos.bbox2d.size_x / 2)
-                    faceBoundingBoxes.append((top, right, bottom, left))
-
-            if len(faceBoundingBoxes) > 0:                
-                cv2.imwrite(os.path.join(dirName, addImageLabels[i]), cvImage)
-                self.get_logger().warning('Picture ' + addImageLabels[i] + ' was  saved.')
-                i+= 1
-            else:
-                self.get_logger().warning("The face was not detected.")
-
-        cv2.destroyAllWindows()
-        
-        self.encodeFaces(faceBoundingBoxes, cvImage)
-        peopleIntroducingResponse.response = True
-
-        knownFacesDict = self.loadVar('features')
-        self.knownFaces = self.flatten(knownFacesDict)
-        return peopleIntroducingResponse
-    
     def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str) -> Detection3D:
         detection3d = Detection3D()
         detection3d.header = detectionHeader
