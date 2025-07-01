@@ -299,6 +299,7 @@ class YoloTrackerRecognition(BaseRecognition):
         detection3d.global_id = global_id
         detection3d.label = label
         detection3d.score = score
+        bb3d.center.position.y = 0.0
         detection3d.bbox3d = bb3d
 
         if len(pose) != 0:
