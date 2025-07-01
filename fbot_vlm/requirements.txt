@@ -1,5 +1,6 @@
-langchain_core
-dotenv
-langchain_openai
-langchain_ollama
-langchain_google_genai
+langchain-core
+langchain-ollama
+langchain-openai
+langchain-google-genai
+dotoenv
+Pillow

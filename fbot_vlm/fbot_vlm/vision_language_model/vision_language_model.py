@@ -34,11 +34,17 @@ try:
 except:
     pass
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy
+from rclpy.callback_groups import ReentrantCallbackGroup
+
 
 
 class VisionLanguageModel(Node):
-    def __init__(self):
-        super().__init__('vision_language_model')
+    def __init__(self, ):
+        """
+        @brief A Node that provides Vision Language Model (VLM) capabilities in a flexible way, allowing for different VLM APIs and models,
+        and handling image input for question answering. 
+        """
+        super().__init__('vision_language_model', )
         
         self.bridge = CvBridge()
         self.vlm_api_type = None
@@ -66,16 +72,23 @@ class VisionLanguageModel(Node):
         self.get_logger().info(f"VisionLanguageModel initialized with API type: {self.vlm_api_type}, model: {self.vlm_api_model}, host: {self.vlm_api_host}")
 
         self.answer_history: dict[str, list[VLMAnswer]] = {}
-        self.vlm_service = self.create_service(VLMQuestionAnswering, self.vlm_service_name, self.handleServiceQuestionAnswering)
-        self.vlm_question_subscriber = self.create_subscription(VLMQuestion, self.vlm_question_topic, self.handleTopicQuestion, 10)
+        service_cb_group = ReentrantCallbackGroup()
+        self.vlm_service = self.create_service(VLMQuestionAnswering, self.vlm_service_name, self.handleServiceQuestionAnswering, callback_group=service_cb_group)
+        topic_cb_group = ReentrantCallbackGroup()
+        self.vlm_question_subscriber = self.create_subscription(VLMQuestion, self.vlm_question_topic, self.handleTopicQuestion, 10, callback_group=topic_cb_group)
         qos_profile = QoSProfile(depth=1)
         qos_profile.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
         self.vlm_answer_publisher = self.create_publisher(VLMAnswer, self.vlm_answer_topic, qos_profile)
         self.vlm_answer_history_service = self.create_service(VLMAnswerHistory, self.vlm_history_service_name, self.handleAnswerHistoryService)
 
 
-    def handleServiceQuestionAnswering(self, req: VLMQuestionAnswering.Request, res: VLMQuestionAnswering.Response):
-        self.get_logger().info(f"Received question: {req.question}, use_image: {req.use_image}")
+    def handleServiceQuestionAnswering(self, req: VLMQuestionAnswering.Request, res: VLMQuestionAnswering.Response) -> VLMQuestionAnswering.Response:
+        """
+        @brief Callback function for the VLM question answering service.
+
+        @param req: The request containing the question and optional image.
+        @param res: The response containing the answer, success status, confidence, and timestamp.
+        """
         try:
             self.validateHostConnection()
             self.validateQuestion(req)
@@ -100,10 +113,15 @@ class VisionLanguageModel(Node):
                 confidence=res.confidence,
                 stamp=res.stamp
             ))
-            self.get_logger().info(f"Answering question: {req.question} with answer: {res.answer}")
+            self.get_logger().info(f"VLM answered with: {res.answer}")
             return res
     
-    def handleAnswerHistoryService(self, req: VLMAnswerHistory.Request, res: VLMAnswerHistory.Response):
+    def handleAnswerHistoryService(self, req: VLMAnswerHistory.Request, res: VLMAnswerHistory.Response) -> VLMAnswerHistory.Response:
+        """ 
+        @brief Callback function for the VLM answer history service, providing a list with the history of answers.
+        @param req: The request containing the filter for questions.
+        @param res: The response containing the list of answers and the total history length.
+        """
         res.answers = []
         if not req.questions_filter is None and len(req.questions_filter) > 0:
             for question in req.questions_filter:
@@ -116,13 +134,16 @@ class VisionLanguageModel(Node):
             # Return all answers in the history
             for answers in self.answer_history.values():
                 res.answers.extend(answers)
-        for answers in self.answer_history.values():
-            self.get_logger().info(f"Found {len(answers)} answers for question in history.")
         res.total_history_length = sum(len(answers) for answers in self.answer_history.values())
         self.get_logger().info(f"Returning {len(res.answers)} answers from history.")
         return res
         
-    def handleTopicQuestion(self, msg: VLMQuestion):
+    def handleTopicQuestion(self, msg: VLMQuestion) -> None:
+        """
+        @brief Callback function for the VLM question topic subscriber, processing incoming questions and invoking the VLM.
+        @param msg: The incoming VLMQuestion message containing the question and optional image.
+        """
+        self.get_logger().info(f"Received question: {msg.question} with use_image={msg.use_image}")
         answer_msg = VLMAnswer()
 
         try:
@@ -139,12 +160,17 @@ class VisionLanguageModel(Node):
             answer_msg.success = False
             answer_msg.confidence = 0.0
 
+        self.get_logger().info(f"VLM answered with: {answer_msg.answer}")
         answer_msg.question = msg.question
         answer_msg.stamp = rclpy.time.Time().to_msg()
         self.vlm_answer_publisher.publish(answer_msg)
         self.storeAnswer(answer_msg)
 
-    def storeAnswer(self, answer_obj: VLMAnswer):
+    def storeAnswer(self, answer_obj: VLMAnswer) -> None:
+        """
+        @brief Stores the answer in the answer history, creating a new entry if the question is not already present.
+        @param answer_obj: The VLMAnswer object containing the question, answer, success status, confidence, and timestamp.
+        """
         if answer_obj.question not in self.answer_history:
             self.answer_history[answer_obj.question] = []
             answer_obj.question_id = 0
@@ -153,7 +179,12 @@ class VisionLanguageModel(Node):
         self.answer_history[answer_obj.question].append(answer_obj)
 
     
-    def validateHostConnection(self, timeout=5):
+    def validateHostConnection(self, timeout=5) -> bool:
+        """
+        @brief Validates the connection to the VLM API host.
+        @param timeout: The timeout in seconds for the connection attempt.
+        @return: True if the connection is successful, raises ConnectionError otherwise.
+        """
         try:
             response = requests.get(self.vlm_api_host, timeout=timeout)
             if response.status_code == 200:
@@ -166,9 +197,11 @@ class VisionLanguageModel(Node):
             error_message = f"Erro ao conectar ao host {self.vlm_api_host}: {e}"
             raise ConnectionError(error_message)
     
-    def validateQuestion(self, msg: VLMQuestion | VLMAnswerHistory.Request):
+    def validateQuestion(self, msg: VLMQuestion | VLMAnswerHistory.Request) -> None:
         """
-        Valida os parâmetros necessários para o serviço de VLM.
+        @brief Validates the question in the incoming message.
+        @param msg: The incoming message containing the question and optional image.
+        @raises ValueError: If the question is empty or if the image is not of the correct type.
         """
         if not msg.question or msg.question == '' or msg.question == 'None':
             raise ValueError("Question cannot be empty.")
@@ -177,9 +210,13 @@ class VisionLanguageModel(Node):
         if msg.use_image and not isinstance(msg.image, Image):
             raise ValueError("Image must be of type sensor_msgs/Image or None when use_image is True.")
         
-    def getHumanMessage(self, question: str, use_image: bool = False, image: Image = None):
+    def getHumanMessage(self, question: str, use_image: bool = False, image: Image = None) -> HumanMessage:
         """
-        Cria uma mensagem de humano com a pergunta e a imagem.
+        @brief Creates a HumanMessage for the VLM, optionally including an image.
+        @param question: The question to be asked.
+        @param use_image: Whether to include an image in the message.
+        @param image: The image to be included in the message, if use_image is True
+        @return: A HumanMessage object containing the question and image.
         """
         try:
 
@@ -205,8 +242,13 @@ class VisionLanguageModel(Node):
         except Exception as e:
             raise ValueError(f"Failed to create human message: {e}")
         
-    def get_image_content(self, question_image: Image = None):
-        # Converte a mensagem de imagem para OpenCV
+    def get_image_content(self, question_image: Image = None) -> dict:
+        """
+        @brief Retrieves the image content for the question, either from the provided image or by waiting for an image on the topic.
+        @param question_image: The image to be used for the question, if provided.
+        @return: A dictionary containing the image URL in base64 format.
+        """
+
         if not question_image or not isinstance(question_image, Image) or question_image == Image():
             self.get_logger().info(f"Waiting for image on topic {self.rgb_image_topic} with timeout {self.rgb_image_timeout} seconds.")
             success, self.rgb_image_msg = wait_for_message(Image, self, self.rgb_image_topic, qos_profile=10, time_to_wait=self.rgb_image_timeout)
@@ -235,7 +277,10 @@ class VisionLanguageModel(Node):
                 }
             }
 
-    def read_parameters(self):
+    def read_parameters(self) -> None:
+        """
+        @brief Reads parameters from the node and loads environment variables if necessary.
+        """
         package_share_dir = get_package_share_directory('fbot_vlm')
         dotenv_path = os.path.join(package_share_dir, '.env')
         self.vlm_api_type = self.get_parameter('vlm_api_type').value
@@ -250,7 +295,11 @@ class VisionLanguageModel(Node):
         if self.vlm_api_type in ('openai', 'google-genai'):
             load_dotenv(dotenv_path=dotenv_path)
     
-    def load_params(self, filename):
+    def load_params(self, filename) -> None:
+        """
+        @brief Loads parameters from a YAML configuration file.
+        @param filename: The name of the YAML file containing the parameters.
+        """
         try:
             with open(os.path.join(get_package_share_directory('fbot_vlm'), 'config', filename)) as config_file:
                 config = yaml.safe_load(config_file)[self.get_name()]['ros__parameters']
@@ -266,7 +315,12 @@ class VisionLanguageModel(Node):
         self.declare_parameter('vlm_api_host', 'http://localhost:11434')
         self.declare_parameter('vlm_api_model', 'None')
             
-    def declare_parameters_from_dict(self, params, path=''):
+    def declare_parameters_from_dict(self, params, path='') -> None:
+        """
+        @brief Recursively declares parameters from a dictionary.
+        @param params: The dictionary containing parameters to declare.
+        @param path: The path prefix for the parameters.
+        """
         for key, value in params.items():
             if isinstance(value, dict):
                 self.declare_parameters_from_dict(value, path + key + '/')
@@ -276,9 +330,14 @@ class VisionLanguageModel(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = VisionLanguageModel()
-    rclpy.spin(node)
-    node.destroy_node()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.spin()
     rclpy.shutdown()
+
+    rclpy.init(args=args)
+    node = FaceRecognition()
+    
 
 if __name__ == '__main__':
     main()

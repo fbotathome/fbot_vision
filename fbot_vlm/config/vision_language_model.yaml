@@ -6,14 +6,14 @@ vision_language_model:
                 topic: /fbot_vision/camera/color/image_raw
                 timeout: 5
             question:
-                topic: /fbot_vision/bvlm/question_answering/question
+                topic: /fbot_vision/vlm/question_answering/question
         
         publishers:
             answer:
-                topic: /fbot_vision/bvlm/question_answering/answer
+                topic: /fbot_vision/vlm/question_answering/answer
 
         servers:
             question_answering:
-                service: /fbot_vision/bvlm/question_answering/query
+                service: /fbot_vision/vlm/question_answering/query
             answer_history:
-                service: /fbot_vision/bvlm/answer_history/query
+                service: /fbot_vision/vlm/answer_history/query

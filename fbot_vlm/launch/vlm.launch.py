@@ -47,6 +47,7 @@ def generate_launch_description():
         package='fbot_vlm',
         executable='vision_language_model',
         name='vision_language_model',
+        namespace='fbot_vision/vlm',
         parameters=[
             LaunchConfiguration('config_vlm'),
             {'vlm_api_type': LaunchConfiguration('vlm_api_type')},
