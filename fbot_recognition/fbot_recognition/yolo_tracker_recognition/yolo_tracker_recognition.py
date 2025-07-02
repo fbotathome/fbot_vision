@@ -271,7 +271,7 @@ class YoloTrackerRecognition(BaseRecognition):
             if results[0].keypoints != None:
                 data.pose = [(kp.x, kp.y, kp.score, kp.id) for kp in description.pose]
                 pose3D = poseProcessing(data)
-            description3D = self.createDetection3d(bbox3D,description.score,HEADER,description.label, description.id, description.global_id, pose=pose3D)
+            description3D = self.createDetection3d(bbox3D,description.score,description.header,description.label, description.id, description.global_id, pose=pose3D)
             if tracked_description != None and description.global_id == tracked_description.global_id:
                 track_recognition3D.detections.append(description3D)
             
