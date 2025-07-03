@@ -98,6 +98,9 @@ class YoloV8Recognition(BaseRecognition):
                 except Exception as e:
                     self.get_logger().error(f"Error processing bounding box: {e}")
                     continue
+
+                if np.linalg.norm([bb3d.center.position.x,bb3d.center.position.y,bb3d.center.position.z]) < 0.05:
+                    continue
                 
                 detection3d = self.createDetection3d(bb2d, bb3d, score, detectionHeader, label)
                 if detection3d is not None:
