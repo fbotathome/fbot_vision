@@ -56,22 +56,32 @@ class VisionLanguageModel(Node):
         self.vlm_question_topic = None
         self.vlm_answer_topic = None
         self.vlm_history_service_name = None
+        self.loadParams(filename='vision_language_model.yaml')
+        self.readParameters()
 
-        self.load_params(filename='vision_language_model.yaml')
-        self.read_parameters()
+        self.answer_history: dict[str, list[VLMAnswer]] = {}
+        self.initClientVLM()
+        self.initRosComm()
 
+    def initClientVLM(self) -> None:
+        """
+        @brief Initializes the VLM client based on the API type and model specified in the parameters.
+        """
         if self.vlm_api_type == 'ollama':
             self.vlm = ChatOllama(model=self.vlm_api_model, base_url=self.vlm_api_host)
         elif self.vlm_api_type == 'openai':
             self.vlm = ChatOpenAI(model_name=self.vlm_api_model, openai_api_base=self.vlm_api_host)
         elif self.vlm_api_type == 'google-genai':
-            self.vlm = ChatGoogleGenerativeAI(model=self.vlm_api_model, convert_system_message_to_human=True)
+            self.vlm = ChatGoogleGenerativeAI(model=self.vlm_api_model)
         else:
             raise ValueError(f"VLM API type must be one of: {['ollama', 'openai', 'google-genai']}!")
 
         self.get_logger().info(f"VisionLanguageModel initialized with API type: {self.vlm_api_type}, model: {self.vlm_api_model}, host: {self.vlm_api_host}")
 
-        self.answer_history: dict[str, list[VLMAnswer]] = {}
+    def initRosComm(self) -> None:
+        """
+        @brief Initializes the ROS communication components, including service and topic subscriptions.
+        """
         service_cb_group = ReentrantCallbackGroup()
         self.vlm_service = self.create_service(VLMQuestionAnswering, self.vlm_service_name, self.handleServiceQuestionAnswering, callback_group=service_cb_group)
         topic_cb_group = ReentrantCallbackGroup()
@@ -85,7 +95,6 @@ class VisionLanguageModel(Node):
     def handleServiceQuestionAnswering(self, req: VLMQuestionAnswering.Request, res: VLMQuestionAnswering.Response) -> VLMQuestionAnswering.Response:
         """
         @brief Callback function for the VLM question answering service.
-
         @param req: The request containing the question and optional image.
         @param res: The response containing the answer, success status, confidence, and timestamp.
         """
@@ -219,30 +228,15 @@ class VisionLanguageModel(Node):
         @return: A HumanMessage object containing the question and image.
         """
         try:
-
             if use_image:
-                return HumanMessage(
-                    content=[
-                        self.get_image_content(image),
-                        {
-                            'type': 'text',
-                            'text': question
-                        }
-                    ]
-                )
+                return HumanMessage(content=[self.getImageContent(image),{'type': 'text','text': question}])
             else:
                 return HumanMessage(
-                    content=[
-                        {
-                            'type': 'text',
-                            'text': question
-                        }
-                    ]
-                )
+                    content=[{'type': 'text','text': question}])
         except Exception as e:
             raise ValueError(f"Failed to create human message: {e}")
         
-    def get_image_content(self, question_image: Image = None) -> dict:
+    def getImageContent(self, question_image: Image = None) -> dict:
         """
         @brief Retrieves the image content for the question, either from the provided image or by waiting for an image on the topic.
         @param question_image: The image to be used for the question, if provided.
@@ -277,12 +271,12 @@ class VisionLanguageModel(Node):
                 }
             }
 
-    def read_parameters(self) -> None:
+    def readParameters(self) -> None:
         """
         @brief Reads parameters from the node and loads environment variables if necessary.
         """
         package_share_dir = get_package_share_directory('fbot_vlm')
-        dotenv_path = os.path.join(package_share_dir, '.env')
+        dotenv_path = os.path.join(package_share_dir, 'config', '.env')
         self.vlm_api_type = self.get_parameter('vlm_api_type').value
         self.vlm_api_host = self.get_parameter('vlm_api_host').value
         self.vlm_api_model = self.get_parameter('vlm_api_model').value
@@ -292,10 +286,9 @@ class VisionLanguageModel(Node):
         self.vlm_question_topic = self.get_parameter('subscribers/question/topic').value
         self.vlm_answer_topic = self.get_parameter('publishers/answer/topic').value
         self.vlm_history_service_name = self.get_parameter('servers/answer_history/service').value
-        if self.vlm_api_type in ('openai', 'google-genai'):
-            load_dotenv(dotenv_path=dotenv_path)
+        load_dotenv(dotenv_path=dotenv_path)
     
-    def load_params(self, filename) -> None:
+    def loadParams(self, filename) -> None:
         """
         @brief Loads parameters from a YAML configuration file.
         @param filename: The name of the YAML file containing the parameters.
@@ -310,12 +303,12 @@ class VisionLanguageModel(Node):
             self.get_logger().error(f"Missing key in configuration file: {e}")
             raise
 
-        self.declare_parameters_from_dict(config)
-        self.declare_parameter('vlm_api_type', 'None')
+        self.declareParametersFromDict(config)
+        self.declare_parameter('vlm_api_type', 'ollama')
         self.declare_parameter('vlm_api_host', 'http://localhost:11434')
-        self.declare_parameter('vlm_api_model', 'None')
+        self.declare_parameter('vlm_api_model', 'gemma3:4b')
             
-    def declare_parameters_from_dict(self, params, path='') -> None:
+    def declareParametersFromDict(self, params, path='') -> None:
         """
         @brief Recursively declares parameters from a dictionary.
         @param params: The dictionary containing parameters to declare.
@@ -323,7 +316,7 @@ class VisionLanguageModel(Node):
         """
         for key, value in params.items():
             if isinstance(value, dict):
-                self.declare_parameters_from_dict(value, path + key + '/')
+                self.declareParametersFromDict(value, path + key + '/')
             else:
                 self.declare_parameter(path + key, value)
 
@@ -334,10 +327,6 @@ def main(args=None):
     executor.add_node(node)
     executor.spin()
     rclpy.shutdown()
-
-    rclpy.init(args=args)
-    node = FaceRecognition()
-    
 
 if __name__ == '__main__':
     main()

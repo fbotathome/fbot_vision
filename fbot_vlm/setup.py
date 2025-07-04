@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob.glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'), glob.glob('config/*.yaml')),
-        (os.path.join('share', package_name), ['.env']),
+        (os.path.join('share', package_name, 'config'), glob.glob('config/.env')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -25,7 +25,6 @@ setup(
     entry_points={
         'console_scripts': [
             'vision_language_model = fbot_vlm.vision_language_model.vision_language_model:main',
-            'test_vlm = fbot_vlm.vision_language_model.test_vlm:main',
         ],
     },
 )
