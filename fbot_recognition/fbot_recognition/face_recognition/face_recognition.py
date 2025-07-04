@@ -139,25 +139,19 @@ class FaceRecognition(BaseRecognition):
 
         try:
             self.get_logger().info("Running YOLO model for face detection")
-            results = self.yolo_model.track(cv_image, classes=0, conf=0.8, imgsz=480)
+            results = self.yolo_model.track(cv_image, classes=0, conf=self.threshold, imgsz=480)
             boxes = results[0].boxes
             self.get_logger().info(f"Detected {len(boxes)} faces")  
             
             face_detections = []
 
             for idx, box in enumerate(boxes):
-                print(f"Processing box of index {idx}")
-                # Extract bounding box coordinates
+                self.get_logger().info(f"Processing box of index {idx}")
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                print("extracted bbox")
-                # Crop the detected face from the frame
                 face_crop = cv_image[y1:y2, x1:x2]
-                print("cropped image saved")
-                # Ensure the cropped face is valid
+
                 if face_crop.size == 0:
-                    print("Crop size is 0")
                     continue
-                print("trying to represent")
 
                 face_detection = DeepFace.represent(
                     img_path=face_crop,
@@ -190,10 +184,9 @@ class FaceRecognition(BaseRecognition):
             confidence = face_detection['face_confidence']
 
             detection = Detection3D()
-            if not nearest_neighbours[idx]:
-                name = 'unknown'
-                uuid = ''
-            else:
+            name = 'unknown'
+            uuid = ''
+            if nearest_neighbours[idx]:
                 name = nearest_neighbours[idx]['name']
                 uuid = nearest_neighbours[idx]['uuid']
 
@@ -251,11 +244,6 @@ class FaceRecognition(BaseRecognition):
         self.get_logger().info("Configuring Redis for face recognition")
         self.redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
         self.index_name = "face_recognition_index"
-
-        self.deepface_model_name = 'Facenet512'
-        self.embedding_dim = 512
-        self.deepface_detector_backend = 'yolov8'
-        self.distance_metric = 'COSINE'  # 'L2', 'IP' OR 'COSINE'
 
         # Define the schema for the index
         schema = (
@@ -394,6 +382,10 @@ class FaceRecognition(BaseRecognition):
         self.introducePersonServername = self.get_parameter("servers.introduce_person.servername").value
         self.threshold = self.get_parameter("threshold").value
 
+        self.deepface_model_name = 'Facenet512'
+        self.embedding_dim = 512
+        self.deepface_detector_backend = 'yolov8'
+        self.distance_metric = 'COSINE'  # 'L2', 'IP' OR 'COSINE'
 
         super().readParameters()
         self.modelPath = self.pkgPath + '/' + self.get_parameter('model_path').value
