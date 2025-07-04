@@ -16,7 +16,7 @@ from fbot_recognition import BaseRecognition
 import rclpy.logging
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
-from fbot_vision_msgs.msg import Detection3D, Detection3DArray
+from fbot_vision_msgs.msg import Detection3D, FaceDetection3D, FaceDetection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
@@ -64,7 +64,7 @@ class FaceRecognition(BaseRecognition):
 
     def initRosComm(self):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
+        self.faceRecognitionPublisher = self.create_publisher(FaceDetection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
         service_cb_group = ReentrantCallbackGroup()
         self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         self.last_detection = None
@@ -126,25 +126,63 @@ class FaceRecognition(BaseRecognition):
     
         return res
 
-    def callback(self, imageMsg: Image):
+    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         
         self.get_logger().info("Face recognition callback triggered")
 
-        face_recognitions = Detection3DArray()
+        face_recognitions = FaceDetection3DArray()
         face_recognitions.header = imageMsg.header
         face_recognitions.image_rgb = copy.deepcopy(imageMsg) 
-        # cv_image = self.cvBridge.imgmsg_to_cv2(imageMsg, desired_encoding="bgr8")
-        cv_image = self.cvBridge.imgmsg_to_cv2(imageMsg)
-        debug_image = self.cvBridge.imgmsg_to_cv2(imageMsg) 
 
+        cv_image = self.cvBridge.imgmsg_to_cv2(imageMsg)
+        debug_image = copy.deepcopy(cv_image)
+
+        face_detections = self.detectFacesInImage(cv_image)
+
+        if len(face_detections) > 0:
+            nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections])
+
+        for idx, face_detection in enumerate(face_detections):
+
+            confidence = face_detection['face_confidence']
+
+            top, left = face_detection['facial_area']['y'], face_detection['facial_area']['x']
+            right = left + face_detection['facial_area']['w']
+            bottom = top + face_detection['facial_area']['h']
+
+            try:
+                bbox2d, bbox3d = self.createBoundingBoxes(cameraInfoMsg, depthMsg, top, right, left, bottom)
+            except Exception as e:
+                self.get_logger().error(f"{e}. Skipping detection")
+                continue
+            
+            cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 1)
+            font = cv2.FONT_HERSHEY_DUPLEX
+            cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 1)
+
+            name = 'unknown'
+            uuid = ''
+            if nearest_neighbours[idx]:
+                name = nearest_neighbours[idx]['name']
+                uuid = nearest_neighbours[idx]['uuid']
+
+            faceDetection3D = self.createFaceDetection3D(bbox2d, bbox3d, imageMsg.header, name, uuid, face_detection['embedding'])
+            face_recognitions.detections.append(faceDetection3D)
+
+        self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debug_image), encoding='rgb8'))
+
+        if len(face_recognitions.detections) > 0:
+            self.faceRecognitionPublisher.publish(face_recognitions)
+            self.last_detection = face_recognitions
+
+    def detectFacesInImage(self, cv_image):
+        detections=[]
         try:
             self.get_logger().info("Running YOLO model for face detection")
             results = self.yolo_model.track(cv_image, classes=0, conf=self.threshold, imgsz=480)
             boxes = results[0].boxes
             self.get_logger().info(f"Detected {len(boxes)} faces")  
             
-            face_detections = []
-
             for idx, box in enumerate(boxes):
                 self.get_logger().info(f"Processing box of index {idx}")
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -159,7 +197,7 @@ class FaceRecognition(BaseRecognition):
                     detector_backend= 'skip',
                 )
 
-                face_detections.append({
+                detections.append({
                     'facial_area': {
                         'x': x1,
                         'y': y1,
@@ -170,75 +208,46 @@ class FaceRecognition(BaseRecognition):
                     'embedding': face_detection[0]['embedding']
                 })
 
-        except ValueError as e:
-            face_detections = []
+        except Exception as e:
+            self.get_logger().error(f'Error running YOLO for face detection: {e}')
+        finally:
+            return detections
 
-        names = []
-        if len(face_detections) > 0:
-            nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections])
+    def createBoundingBoxes(self, cameraInfoMsg: CameraInfo, depthMsg: Image, top, right, left, bottom):
 
-        for idx, face_detection in enumerate(face_detections):
-            top, left = face_detection['facial_area']['y'], face_detection['facial_area']['x']
-            right = left + face_detection['facial_area']['w']
-            bottom = top + face_detection['facial_area']['h']
-            confidence = face_detection['face_confidence']
+        size = int(right-left), int(bottom-top)
 
-            detection = Detection3D()
-            name = 'unknown'
-            uuid = ''
-            if nearest_neighbours[idx]:
-                name = nearest_neighbours[idx]['name']
-                uuid = nearest_neighbours[idx]['uuid']
+        data = BoundingBoxProcessingData()
+        data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+        data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
+        data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
+        data.boundingBox2D.size_x = float(bottom-top)
+        data.boundingBox2D.size_y = float(right-left)
+        data.maxSize.x = float(3)
+        data.maxSize.y = float(3)
+        data.maxSize.z = float(3)
 
-            detection.label = name
-            detection.uuid = uuid
-            detection.embedding = face_detection['embedding']
-            names.append(name)
-
-            detectionHeader = imageMsg.header
-            detection.header = detectionHeader
-            size = int(right-left), int(bottom-top)
-            
-            detection.bbox2d.center.position.x = float(int(left) + int(size[1]/2))
-            detection.bbox2d.center.position.y = float(int(top) + int(size[0]/2))
-            detection.bbox2d.size_x = float(bottom-top)
-            detection.bbox2d.size_y = float(right-left)
-
-            # bb2d = BoundingBox2D()
-            # data = BoundingBoxProcessingData()
-            # data.sensor.setSensorData(cameraInfoMsg, depthMsg)
-
-
-            # data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
-            # data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
-            # data.boundingBox2D.size_x = float(bottom-top)
-            # data.boundingBox2D.size_y = float(right-left)
-            # data.maxSize.x = float(3)
-            # data.maxSize.y = float(3)
-            # data.maxSize.z = float(3)
-
-            # bb2d = data.boundingBox2D
+        try:
+            bb3d = boundingBoxProcessing(data)
+        except Exception as e:
+            raise Exception("An error occurred while processing the bounding box.")
+        
+        return data.boundingBox2D, bb3d
     
-            # try:
-            #     bb3d = boundingBoxProcessing(data)
-            # except Exception as e:
-            #     self.get_logger().error(f"Error processing bounding box: {e}")
-            #     continue
 
-            cv2.rectangle(debug_image, (left, top), (right, bottom), (0, 255, 0), 2)
-            
-            font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(debug_image, name, (left + 4, bottom - 4), font, 0.5, (0,0,255), 2)
-            detection3d = detection #self.createDetection3d(bb2d, bb3d, detectionHeader, name)
-            if detection3d is not None:
-                face_recognitions.detections.append(detection3d)
+    def createFaceDetection3D(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str, uuid: str, embedding: list) -> FaceDetection3D:
 
-        self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debug_image), encoding='rgb8'))
+        faceDetection3D = FaceDetection3D()
+        faceDetection3D.detection = Detection3D()
+        faceDetection3D.detection.header = detectionHeader
+        faceDetection3D.detection.id = 0
+        faceDetection3D.detection.label = label
+        faceDetection3D.detection.uuid = uuid
+        faceDetection3D.detection.embedding = embedding
+        faceDetection3D.detection.bbox2d = copy.deepcopy(bb2d)
+        faceDetection3D.detection.bbox3d = copy.deepcopy(bb3d)
 
-        if len(face_recognitions.detections) > 0:
-            self.faceRecognitionPublisher.publish(face_recognitions)
-            self.last_detection = face_recognitions
-
+        return faceDetection3D
 
     def configureRedis(self):
         self.get_logger().info("Configuring Redis for face recognition")
@@ -336,15 +345,19 @@ class FaceRecognition(BaseRecognition):
         )
         results_list = []
         for i, embedding in enumerate(embeddings):
+
             if len(embedding) != self.embedding_dim:
                 raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {len(embedding)}")
+            
             result = (
                 self.redis_client.ft(self.index_name).search(
                     query,
                     query_params={"vec": np.array(embedding, dtype=np.float32).tobytes()}
                 )
             ).docs
+
             embedding_result = []
+            
             for doc in result:
                 score = round(1 - float(doc.score), 2)
                 self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
@@ -356,6 +369,7 @@ class FaceRecognition(BaseRecognition):
                     "name": doc.name,
                     "score": score
                 })
+            
             results_list.append(embedding_result)
 
         #TODO: CHOOSE CHEAPER COMBINATION OF THE NEIGHBOURS FOUND
@@ -372,6 +386,7 @@ class FaceRecognition(BaseRecognition):
         self.declare_parameter("servers.introduce_person.servername", "/fbot_vision/fr/introduce_person")
         self.declare_parameter('model_path', 'weights/face_recognition/face_recognition.pth')
         self.declare_parameter("threshold", 0.8)
+        self.declare_parameter("knn_threshold", 0.8)
         super().declareParameters()
 
     def readParameters(self):
@@ -381,6 +396,7 @@ class FaceRecognition(BaseRecognition):
         self.faceRecognitionQosProfile = self.get_parameter("publishers.face_recognition.qos_profile").value
         self.introducePersonServername = self.get_parameter("servers.introduce_person.servername").value
         self.threshold = self.get_parameter("threshold").value
+        self.knn_threshhold = self.get_parameter("knn_threshold").value
 
         self.deepface_model_name = 'Facenet512'
         self.embedding_dim = 512
@@ -468,15 +484,6 @@ class FaceRecognition(BaseRecognition):
                 pass
         self.saveVar(encodedFace, 'features')    
 
-    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str) -> Detection3D:
-        detection3d = Detection3D()
-        detection3d.header = detectionHeader
-        detection3d.id = 0
-        detection3d.label = label
-        detection3d.bbox2d = copy.deepcopy(bb2d)
-        detection3d.bbox3d = copy.deepcopy(bb3d)
-
-        return detection3d
 
 
 def main(args=None):

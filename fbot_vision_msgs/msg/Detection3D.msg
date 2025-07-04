@@ -12,6 +12,3 @@ vision_msgs/BoundingBox2D bbox2d #2D bounding box of the description
 std_msgs/ColorRGBA mean_color #mean color of the Description3D
 
 fbot_vision_msgs/KeyPoint3D[] pose #keypoints array
-
-string uuid #unique identifier for the person of the detected face
-float64[] embedding #face embedding vector
