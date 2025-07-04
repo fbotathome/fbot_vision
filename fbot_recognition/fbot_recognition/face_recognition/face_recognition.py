@@ -101,7 +101,7 @@ class FaceRecognition(BaseRecognition):
 
             face_detection = None
             for detection in self.last_detection.detections:
-                if detection.label == 'unknown':
+                if detection.detection.label == 'unknown':
                     face_detection = detection
                     break
             if not face_detection:
@@ -156,15 +156,16 @@ class FaceRecognition(BaseRecognition):
                 self.get_logger().error(f"{e}. Skipping detection")
                 continue
             
-            cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 1)
-            font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 1)
-
             name = 'unknown'
             uuid = ''
             if nearest_neighbours[idx]:
                 name = nearest_neighbours[idx]['name']
                 uuid = nearest_neighbours[idx]['uuid']
+                
+            cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 1)
+            font = cv2.FONT_HERSHEY_DUPLEX
+            cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 1)
+
 
             faceDetection3D = self.createFaceDetection3D(bbox2d, bbox3d, imageMsg.header, name, uuid, face_detection['embedding'])
             face_recognitions.detections.append(faceDetection3D)
@@ -174,6 +175,7 @@ class FaceRecognition(BaseRecognition):
         if len(face_recognitions.detections) > 0:
             self.faceRecognitionPublisher.publish(face_recognitions)
             self.last_detection = face_recognitions
+            self.get_logger().warn(f'DETECTION PUBLISHED: {face_recognitions.detections}')
 
     def detectFacesInImage(self, cv_image):
         detections=[]
@@ -238,14 +240,14 @@ class FaceRecognition(BaseRecognition):
     def createFaceDetection3D(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str, uuid: str, embedding: list) -> FaceDetection3D:
 
         faceDetection3D = FaceDetection3D()
-        faceDetection3D.detection = Detection3D()
+        # faceDetection3D.detection = Detection3D()
         faceDetection3D.detection.header = detectionHeader
         faceDetection3D.detection.id = 0
         faceDetection3D.detection.label = label
-        faceDetection3D.detection.uuid = uuid
-        faceDetection3D.detection.embedding = embedding
         faceDetection3D.detection.bbox2d = copy.deepcopy(bb2d)
         faceDetection3D.detection.bbox3d = copy.deepcopy(bb3d)
+        faceDetection3D.uuid = uuid
+        faceDetection3D.embedding = embedding
 
         return faceDetection3D
 
@@ -361,7 +363,7 @@ class FaceRecognition(BaseRecognition):
             for doc in result:
                 score = round(1 - float(doc.score), 2)
                 self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
-                if score < self.threshold:
+                if score < self.knn_threshhold:
                     self.get_logger().info(f"Score {score} is below threshold {self.threshold}, skipping {doc.name}.")
                     continue
                 embedding_result.append({
