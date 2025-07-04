@@ -1,0 +1,3 @@
+### How to use
+
+The moondream_recognition node is a drop-in replacement for yolov8_recognition node. At startup, the node begins with the detection class unset. To start detecting objects, set the detection class by publishing a `std_msgs/msg/String` message to the `/fbot_vision/fr/object_prompt`. The content of the string must be the object class to detect. The node then begins detecting objects and publishing the recognitions in exactly the same way as the yolov8_recognition node. You can change the detection class by publishing another message with the new class. Set the class to "" (empty string) in order to stop detection.
