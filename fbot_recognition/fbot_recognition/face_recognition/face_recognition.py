@@ -53,7 +53,6 @@ class FaceRecognition(BaseRecognition):
         self.peopleDatasetPath = os.path.join(datasetPath, 'people/')
         self.declareParameters()
         self.readParameters()
-        self.initRosComm()
         
         self.configureRedis()
 
@@ -61,6 +60,8 @@ class FaceRecognition(BaseRecognition):
 
         knownFacesDict = self.loadVar('features')
         self.knownFaces = self.flatten(knownFacesDict)
+        time.sleep(2)
+        self.initRosComm()
 
     def initRosComm(self):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
@@ -292,20 +293,23 @@ class FaceRecognition(BaseRecognition):
         
         info = self.redis_client.ft(self.index_name).info()
         self.get_logger().info(f"Redis index created. It has {info['num_docs']} documents.")
+        
+        ####
         # Delete existing documents in the Redis index
-        # self.get_logger().info("Deleting existing documents in Redis index.")
+        self.get_logger().info("Deleting existing documents in Redis index.")
         
         
-        # try:
-        #     keys = self.redis_client.keys("faces:*")
-        #     if keys:
-        #         self.redis_client.delete(*keys)
-        #         self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
-        #     else:
-        #         self.get_logger().info("No existing documents found in Redis index.")
-        # except Exception as e:
-        #     self.get_logger().error(f"Error while deleting existing documents: {e}")
-
+        try:
+            keys = self.redis_client.keys("faces:*")
+            if keys:
+                self.redis_client.delete(*keys)
+                self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
+            else:
+                self.get_logger().info("No existing documents found in Redis index.")
+        except Exception as e:
+            self.get_logger().error(f"Error while deleting existing documents: {e}")
+        ####
+        
     def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10):
         uuid = str(uuid4())
         self.get_logger().info(f"Storing face embedding for {name} with UUID {uuid}.")
