@@ -176,7 +176,7 @@ class FaceRecognition(BaseRecognition):
         if len(face_recognitions.detections) > 0:
             self.faceRecognitionPublisher.publish(face_recognitions)
             self.last_detection = face_recognitions
-            self.get_logger().warn(f'DETECTION PUBLISHED: {face_recognitions.detections}')
+            self.get_logger().warn(f'DETECTION PUBLISHED: {[detection.detection.label for detection in face_recognitions.detections]}')
 
     def detectFacesInImage(self, cv_image):
         detections=[]
@@ -296,21 +296,21 @@ class FaceRecognition(BaseRecognition):
         
         ####
         # Delete existing documents in the Redis index
-        self.get_logger().info("Deleting existing documents in Redis index.")
+        # self.get_logger().info("Deleting existing documents in Redis index.")
         
         
-        try:
-            keys = self.redis_client.keys("faces:*")
-            if keys:
-                self.redis_client.delete(*keys)
-                self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
-            else:
-                self.get_logger().info("No existing documents found in Redis index.")
-        except Exception as e:
-            self.get_logger().error(f"Error while deleting existing documents: {e}")
+        # try:
+        #     keys = self.redis_client.keys("faces:*")
+        #     if keys:
+        #         self.redis_client.delete(*keys)
+        #         self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
+        #     else:
+        #         self.get_logger().info("No existing documents found in Redis index.")
+        # except Exception as e:
+        #     self.get_logger().error(f"Error while deleting existing documents: {e}")
         ####
         
-    def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10):
+    def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10*6):
         uuid = str(uuid4())
         self.get_logger().info(f"Storing face embedding for {name} with UUID {uuid}.")
         
@@ -368,7 +368,7 @@ class FaceRecognition(BaseRecognition):
                 score = round(1 - float(doc.score), 2)
                 self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
                 if score < self.knn_threshhold:
-                    self.get_logger().info(f"Score {score} is below threshold {self.threshold}, skipping {doc.name}.")
+                    self.get_logger().info(f"Score {score} is below threshold {self.knn_threshhold}, skipping {doc.name}.")
                     continue
                 embedding_result.append({
                     "uuid": doc.uuid,
@@ -392,7 +392,7 @@ class FaceRecognition(BaseRecognition):
         self.declare_parameter("servers.introduce_person.servername", "/fbot_vision/fr/introduce_person")
         self.declare_parameter('model_path', 'weights/face_recognition/face_recognition.pth')
         self.declare_parameter("threshold", 0.8)
-        self.declare_parameter("knn_threshold", 0.8)
+        self.declare_parameter("knn_threshold", 0.5)
         super().declareParameters()
 
     def readParameters(self):

@@ -2,7 +2,7 @@ face_recognition:
   ros__parameters:
 
     threshold: 0.5
-    threshold: 0.5
+    knn_threshold: 0.5
 
     subscribers:
       
