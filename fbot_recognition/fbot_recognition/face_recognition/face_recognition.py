@@ -178,9 +178,27 @@ class FaceRecognition(BaseRecognition):
         self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debug_image), encoding='rgb8'))
 
         if len(face_recognitions.detections) > 0:
+
+            face_recognitions.detections = self.orderByCloseness(face_recognitions.detections)
+
             self.faceRecognitionPublisher.publish(face_recognitions)
             self.last_detection = face_recognitions
             self.get_logger().warn(f'DETECTION PUBLISHED: {[detection.label for detection in face_recognitions.detections]}')
+
+    def orderByCloseness(self, detections):
+        if len(detections) == 0:
+            return []
+
+        detections_with_dist = []
+        for detection in detections:
+            pose = detection.bbox3d.center.position
+            dist = np.linalg.norm([pose.x, pose.y, pose.z])
+            detections_with_dist.append((detection, dist))
+
+        detections_sorted = sorted(detections_with_dist, key=lambda x: x[1])
+        detections_sorted = [detection[0] for detection in detections_sorted]
+        return detections_sorted
+                
 
     def detectFacesInImage(self, cv_image):
         detections=[]
