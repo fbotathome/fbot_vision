@@ -16,7 +16,7 @@ from fbot_recognition import BaseRecognition
 import rclpy.logging
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
-from fbot_vision_msgs.msg import Detection3D, FaceDetection3D, FaceDetection3DArray
+from fbot_vision_msgs.msg import Detection3D, FaceDetection3D, FaceDetection3DArray, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_vision_msgs.srv import PeopleIntroducing
 from geometry_msgs.msg import Vector3
@@ -65,7 +65,8 @@ class FaceRecognition(BaseRecognition):
 
     def initRosComm(self):
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.faceRecognitionPublisher = self.create_publisher(FaceDetection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
+        # self.faceRecognitionPublisher = self.create_publisher(FaceDetection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
+        self.faceRecognitionPublisher = self.create_publisher(Detection3DArray, self.faceRecognitionTopic,  qos_profile=self.faceRecognitionQosProfile)
         service_cb_group = ReentrantCallbackGroup()
         self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         self.last_detection = None
@@ -102,7 +103,8 @@ class FaceRecognition(BaseRecognition):
 
             face_detection = None
             for detection in self.last_detection.detections:
-                if detection.detection.label == 'unknown':
+                # if detection.detection.label == 'unknown':
+                if detection.label == 'unknown':
                     face_detection = detection
                     break
             if not face_detection:
@@ -131,7 +133,8 @@ class FaceRecognition(BaseRecognition):
         
         self.get_logger().info("Face recognition callback triggered")
 
-        face_recognitions = FaceDetection3DArray()
+        # face_recognitions = FaceDetection3DArray()
+        face_recognitions = Detection3DArray()
         face_recognitions.header = imageMsg.header
         face_recognitions.image_rgb = copy.deepcopy(imageMsg) 
 
@@ -141,7 +144,8 @@ class FaceRecognition(BaseRecognition):
         face_detections = self.detectFacesInImage(cv_image)
 
         if len(face_detections) > 0:
-            nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections])
+            nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections], len(face_detections))
+            self.get_logger().info(f"Found {len(nearest_neighbours)} nearest neighbours for detected faces.")
 
         for idx, face_detection in enumerate(face_detections):
 
@@ -157,15 +161,15 @@ class FaceRecognition(BaseRecognition):
                 self.get_logger().error(f"{e}. Skipping detection")
                 continue
             
-            name = 'unknown'
-            uuid = ''
+            name = f'unknown'
+            uuid = f'{idx}'
             if nearest_neighbours[idx]:
                 name = nearest_neighbours[idx]['name']
                 uuid = nearest_neighbours[idx]['uuid']
                 
-            cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 1)
+            cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 2)
             font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 1)
+            cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 2)
 
 
             faceDetection3D = self.createFaceDetection3D(bbox2d, bbox3d, imageMsg.header, name, uuid, face_detection['embedding'])
@@ -176,7 +180,7 @@ class FaceRecognition(BaseRecognition):
         if len(face_recognitions.detections) > 0:
             self.faceRecognitionPublisher.publish(face_recognitions)
             self.last_detection = face_recognitions
-            self.get_logger().warn(f'DETECTION PUBLISHED: {[detection.detection.label for detection in face_recognitions.detections]}')
+            self.get_logger().warn(f'DETECTION PUBLISHED: {[detection.label for detection in face_recognitions.detections]}')
 
     def detectFacesInImage(self, cv_image):
         detections=[]
@@ -240,13 +244,21 @@ class FaceRecognition(BaseRecognition):
 
     def createFaceDetection3D(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D, detectionHeader: Header, label: str, uuid: str, embedding: list) -> FaceDetection3D:
 
-        faceDetection3D = FaceDetection3D()
-        # faceDetection3D.detection = Detection3D()
-        faceDetection3D.detection.header = detectionHeader
-        faceDetection3D.detection.id = 0
-        faceDetection3D.detection.label = label
-        faceDetection3D.detection.bbox2d = copy.deepcopy(bb2d)
-        faceDetection3D.detection.bbox3d = copy.deepcopy(bb3d)
+        """USing FaceDetection3D message"""
+        # faceDetection3D = FaceDetection3D()
+        # faceDetection3D.detection.header = detectionHeader
+        # faceDetection3D.detection.id = 0
+        # faceDetection3D.detection.label = label
+        # faceDetection3D.detection.bbox2d = copy.deepcopy(bb2d)
+        # faceDetection3D.detection.bbox3d = copy.deepcopy(bb3d)
+
+        """Using Detection3D message"""
+        faceDetection3D = Detection3D()
+        faceDetection3D.header = detectionHeader
+        faceDetection3D.id = 0
+        faceDetection3D.label = label
+        faceDetection3D.bbox2d = copy.deepcopy(bb2d)
+        faceDetection3D.bbox3d = copy.deepcopy(bb3d)
         faceDetection3D.uuid = uuid
         faceDetection3D.embedding = embedding
 
@@ -308,7 +320,7 @@ class FaceRecognition(BaseRecognition):
         #         self.get_logger().info("No existing documents found in Redis index.")
         # except Exception as e:
         #     self.get_logger().error(f"Error while deleting existing documents: {e}")
-        ####
+        # ###
         
     def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10*6):
         uuid = str(uuid4())
@@ -336,25 +348,26 @@ class FaceRecognition(BaseRecognition):
         return uuid
     
     def searchKNN(self, embeddings, k=1):
+        k=k*6
         self.get_logger().info(f"Searching for {k} nearest neighbours for the provided embeddings.")
         if not isinstance(embeddings, list):
             embeddings = [embeddings]
         if not embeddings:
             return None
-        # Convert embeddings to a list of lists
-        
+
         query = (
             Query(f"*=>[KNN {k} @embedding $vec AS score]")
             .sort_by("score")
-            .return_fields("uuid", "name", "score")#.paging(0, k).bf("1.0")
+            .return_fields("uuid", "name", "score", "embedding")
             .dialect(2)
         )
         results_list = []
-        for i, embedding in enumerate(embeddings):
 
+        for i, embedding in enumerate(embeddings):
+            self.get_logger().info(f"Processing embedding {i+1}/{len(embeddings)}.")
             if len(embedding) != self.embedding_dim:
                 raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {len(embedding)}")
-            
+
             result = (
                 self.redis_client.ft(self.index_name).search(
                     query,
@@ -362,26 +375,47 @@ class FaceRecognition(BaseRecognition):
                 )
             ).docs
 
-            embedding_result = []
-            
+            # Group results by UUID and keep only the closest match for each UUID
+            uuid_to_best_match = {}
             for doc in result:
                 score = round(1 - float(doc.score), 2)
                 self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
                 if score < self.knn_threshhold:
                     self.get_logger().info(f"Score {score} is below threshold {self.knn_threshhold}, skipping {doc.name}.")
                     continue
-                embedding_result.append({
-                    "uuid": doc.uuid,
-                    "name": doc.name,
-                    "score": score
-                })
+
+                if doc.uuid not in uuid_to_best_match or score > uuid_to_best_match[doc.uuid]["score"]:
+                    uuid_to_best_match[doc.uuid] = {
+                        "uuid": doc.uuid,
+                        "name": doc.name,
+                        "score": score,
+                    }
             
+            self.get_logger().info(f"Found {len(uuid_to_best_match)} unique matches for embedding {i+1}/{len(embeddings)}.")
+            embedding_result = list(uuid_to_best_match.values())
             results_list.append(embedding_result)
 
-        #TODO: CHOOSE CHEAPER COMBINATION OF THE NEIGHBOURS FOUND
+        # Resolve conflicts where multiple embeddings match the same UUID
+        assigned_uuids = set()
+        final_results = [None] * len(embeddings)
 
-        first_results = [embedding_result[0] if embedding_result else None for embedding_result in results_list]
-        return first_results
+        for i, embedding_result in enumerate(results_list):
+            for match in embedding_result:
+                if match["uuid"] not in assigned_uuids:
+                    final_results[i] = match
+                    assigned_uuids.add(match["uuid"])
+                    break
+
+        # Handle conflicts by assigning the highest score to one embedding and the next best match to the other
+        for i, embedding_result in enumerate(results_list):
+            if final_results[i] is None:  # If no match was assigned
+                for match in embedding_result:
+                    if match["uuid"] not in assigned_uuids:
+                        final_results[i] = match
+                        assigned_uuids.add(match["uuid"])
+                        break
+
+        return final_results
 
 
     def declareParameters(self):
