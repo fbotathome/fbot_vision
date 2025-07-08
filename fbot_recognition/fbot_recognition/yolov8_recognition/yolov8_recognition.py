@@ -210,29 +210,6 @@ class YoloV8Recognition(BaseRecognition):
             marker.text = '{} ({:.2f})'.format(name, det.score)
             marker.lifetime = duration
             markers.markers.append(marker)
-
-            for idx, kpt3D in enumerate(det.pose):
-                if kpt3D.score > 0:
-                    marker = Marker()
-                    marker.header = det.header
-                    marker.type = Marker.SPHERE
-                    marker.id = idx
-                    marker.color.r = color[1]
-                    marker.color.g = color[2]
-                    marker.color.b = color[0]
-                    marker.color.a = 1
-                    marker.scale.x = 0.05
-                    marker.scale.y = 0.05
-                    marker.scale.z = 0.05
-                    marker.pose.position.x = kpt3D.x
-                    marker.pose.position.y = kpt3D.y
-                    marker.pose.position.z = kpt3D.z
-                    marker.pose.orientation.x = 0.0
-                    marker.pose.orientation.y = 0.0
-                    marker.pose.orientation.z = 0.0
-                    marker.pose.orientation.w = 1.0
-                    marker.lifetime = duration
-                    markers.markers.append(marker)
         
         self.markerPublisher.publish(markers)
 
