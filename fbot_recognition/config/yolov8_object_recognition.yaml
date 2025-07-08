@@ -2,11 +2,19 @@ yolov8_recognition:
   ros__parameters:
 
     threshold: 0.6
+
+    start_on_init: False
       
     max_sizes:
         - [0.5, 0.5, 0.5]
 
     model_file: yolov8n.pt
+
+    services:
+    
+      object_recognition:
+        start: /fbot_vision/fr/object_start
+        stop: /fbot_vision/fr/object_stop
 
     subscribers:
       
