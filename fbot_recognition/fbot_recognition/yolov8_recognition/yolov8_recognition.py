@@ -21,10 +21,7 @@ from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 
 from ament_index_python.packages import get_package_share_directory
 
-#TODO: Allocate and deallocate model in the right way
-#TODO: Make the unloadModel function a service
 #TODO: Filter the area inside the house by using i2w.inPolygonFilter()
-#TODO: Need one declare parameters and one read parameters functions
 
 class YoloV8Recognition(BaseRecognition):
     def __init__(self) -> None:
