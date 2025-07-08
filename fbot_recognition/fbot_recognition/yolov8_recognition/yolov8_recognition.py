@@ -50,7 +50,7 @@ class YoloV8Recognition(BaseRecognition):
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
-    def unLoadModel(self) -> None:
+    def unloadModel(self) -> None:
         del self.model
         torch.cuda.empty_cache()
         self.model = None
@@ -62,7 +62,7 @@ class YoloV8Recognition(BaseRecognition):
 
     def _stopRecognition(self):
         self.run = False
-        self.unLoadModel()
+        self.unloadModel()
         self.get_logger().info("Stopping Object Recognition!!!")
 
     def startRecognition(self, req: Empty.Request, resp: Empty.Response):
