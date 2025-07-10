@@ -75,8 +75,8 @@ class FaceRecognition(BaseRecognition):
     
     def forgetPersonCB(self, req: PeopleForgetting.Request, res: PeopleForgetting.Response):
         self.get_logger().info(f"Received forget person request: {req.name}")
-        
-        num_deleted = self.deleteFaceEmbeddings(req.name, req.uuid)
+
+        num_deleted = self.deleteFaceEmbeddings(req.name, req.uuid, req.protected_names, req.protected_uuids)
 
         res.success = num_deleted > 0
         res.num_deleted = num_deleted
@@ -135,7 +135,6 @@ class FaceRecognition(BaseRecognition):
         return res
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
-        
         self.get_logger().info("Face recognition callback triggered")
 
         # face_recognitions = FaceDetection3DArray()
@@ -149,7 +148,7 @@ class FaceRecognition(BaseRecognition):
         face_detections = self.detectFacesInImage(cv_image)
 
         self.unknown_idx = 0
-        
+
         if len(face_detections) > 0:
             nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections], len(face_detections))
             self.get_logger().info(f"Found {len(nearest_neighbours)} nearest neighbours for detected faces.")
@@ -349,36 +348,42 @@ class FaceRecognition(BaseRecognition):
         #     self.get_logger().error(f"Error while deleting existing documents: {e}")
         # ###
         
-    def deleteFaceEmbeddings(self, name: str, uuid: str = None):
+    def deleteFaceEmbeddings(self, name: str = None, uuid: str = None, protected_names: list = None, protected_uuids: list = None) -> int:
         """
         Delete face embeddings from Redis for a given name and optionally a UUID.
         
         :param name: The name associated with the embeddings to delete.
         :param uuid: (Optional) The UUID associated with the embeddings to delete.
         """
-        if not name:
-            raise ValueError("Name must be provided to delete embeddings.")
-        
-        if uuid is not None and uuid != '':
+        if name and name!='' and uuid and uuid!='':
             # Delete embeddings for the specific name and UUID
             keys = self.redis_client.keys(f"faces:{name}:{uuid}:*")
-            if keys:
-                self.redis_client.delete(*keys)
-                self.get_logger().info(f"Deleted {len(keys)} embeddings for {name} with UUID {uuid}.")
-                num_deleted = len(keys)
-            else:
-                self.get_logger().info(f"No embeddings found for {name} with UUID {uuid}.")
-                num_deleted = 0
-        else:
+            
+        elif name and name!='':
             # Delete all embeddings for the given name
             keys = self.redis_client.keys(f"faces:{name}:*")
-            if keys:
-                self.redis_client.delete(*keys)
-                self.get_logger().info(f"Deleted {len(keys)} embeddings for {name}.")
-                num_deleted = len(keys)
-            else:
-                self.get_logger().info(f"No embeddings found for {name}.")
-                num_deleted = 0
+        elif uuid and uuid!='':
+            # Delete all embeddings for the given UUID
+            keys = self.redis_client.keys(f"faces:*:{uuid}:*")
+        else:
+            # Delete all embeddings
+            keys = self.redis_client.keys("faces:*")
+            
+        if protected_names and protected_names != []:
+            keys = [key for key in keys if not any(protected_name in key for protected_name in protected_names)]
+        if protected_uuids and protected_uuids != []:
+            keys = [key for key in keys if not any(protected_uuid in key for protected_uuid in protected_uuids)]
+
+        add_message = f" for {name}" if name else ""
+        add_message += f" with UUID {uuid}" if uuid else ""
+
+        if keys:
+            self.redis_client.delete(*keys)
+            self.get_logger().info(f"Deleted {len(keys)} embeddings{add_message}.")
+            num_deleted = len(keys)
+        else:
+            self.get_logger().info(f"No embeddings found to delete{add_message}.")
+            num_deleted = 0
 
         return num_deleted
 
