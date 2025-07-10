@@ -152,6 +152,7 @@ class FaceRecognition(BaseRecognition):
             nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections], len(face_detections))
             self.get_logger().info(f"Found {len(nearest_neighbours)} nearest neighbours for detected faces.")
 
+        unknown_idx = 0
         for idx, face_detection in enumerate(face_detections):
 
             confidence = face_detection['face_confidence']
@@ -165,13 +166,15 @@ class FaceRecognition(BaseRecognition):
             except Exception as e:
                 self.get_logger().error(f"{e}. Skipping detection")
                 continue
-            
-            name = f'unknown'
-            uuid = f'{idx}'
+
             if nearest_neighbours[idx]:
                 name = nearest_neighbours[idx]['name']
                 uuid = nearest_neighbours[idx]['uuid']
-                
+            else:
+                name = f'unknown'
+                uuid = f'{unknown_idx}'
+                unknown_idx += 1
+   
             cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 2)
             font = cv2.FONT_HERSHEY_DUPLEX
             cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 2)
