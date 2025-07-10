@@ -27,3 +27,5 @@ face_recognition:
 
       introduce_person:
         service: /fbot_vision/fr/introduce_person
+      forget_person:
+        service: /fbot_vision/fr/forget_person

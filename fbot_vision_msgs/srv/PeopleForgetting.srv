@@ -1,0 +1,5 @@
+string name
+string uuid
+---
+bool success
+int32 num_deleted

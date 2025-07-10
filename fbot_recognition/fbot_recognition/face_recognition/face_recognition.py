@@ -18,7 +18,7 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
 from fbot_vision_msgs.msg import Detection3D, FaceDetection3D, FaceDetection3DArray, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
-from fbot_vision_msgs.srv import PeopleIntroducing
+from fbot_vision_msgs.srv import PeopleIntroducing, PeopleForgetting
 from geometry_msgs.msg import Vector3
 from rclpy.callback_groups import ReentrantCallbackGroup
 import rclpy.wait_for_message
@@ -70,13 +70,18 @@ class FaceRecognition(BaseRecognition):
         service_cb_group = ReentrantCallbackGroup()
         self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         self.last_detection = None
-        # self.camera_subscription = self.create_subscription(
-        #     Image, 
-        #     self.topicsToSubscribe['image_rgb'], 
-        #     self.callback, 
-        #     qos_profile=self.qosProfile
-        # )
+        self.peopleForgettingService = self.create_service(srv_type=PeopleForgetting, srv_name=self.forgetPersonServername, callback=self.forgetPersonCB, callback_group=service_cb_group)
         super().initRosComm(callbackObject=self)
+    
+    def forgetPersonCB(self, req: PeopleForgetting.Request, res: PeopleForgetting.Response):
+        self.get_logger().info(f"Received forget person request: {req.name}")
+        
+        num_deleted = self.deleteFaceEmbeddings(req.name, req.uuid)
+
+        res.success = num_deleted > 0
+        res.num_deleted = num_deleted
+
+        return res
     
     def peopleIntroducingCB(self, req: PeopleIntroducing.Request, res: PeopleIntroducing.Response):
         self.get_logger().info(f"Received introduce person request: {req.name}")
@@ -340,6 +345,39 @@ class FaceRecognition(BaseRecognition):
         #     self.get_logger().error(f"Error while deleting existing documents: {e}")
         # ###
         
+    def deleteFaceEmbeddings(self, name: str, uuid: str = None):
+        """
+        Delete face embeddings from Redis for a given name and optionally a UUID.
+        
+        :param name: The name associated with the embeddings to delete.
+        :param uuid: (Optional) The UUID associated with the embeddings to delete.
+        """
+        if not name:
+            raise ValueError("Name must be provided to delete embeddings.")
+        
+        if uuid is not None and uuid != '':
+            # Delete embeddings for the specific name and UUID
+            keys = self.redis_client.keys(f"faces:{name}:{uuid}:*")
+            if keys:
+                self.redis_client.delete(*keys)
+                self.get_logger().info(f"Deleted {len(keys)} embeddings for {name} with UUID {uuid}.")
+                num_deleted = len(keys)
+            else:
+                self.get_logger().info(f"No embeddings found for {name} with UUID {uuid}.")
+                num_deleted = 0
+        else:
+            # Delete all embeddings for the given name
+            keys = self.redis_client.keys(f"faces:{name}:*")
+            if keys:
+                self.redis_client.delete(*keys)
+                self.get_logger().info(f"Deleted {len(keys)} embeddings for {name}.")
+                num_deleted = len(keys)
+            else:
+                self.get_logger().info(f"No embeddings found for {name}.")
+                num_deleted = 0
+
+        return num_deleted
+
     def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10*6):
         uuid = str(uuid4())
         self.get_logger().info(f"Storing face embedding for {name} with UUID {uuid}.")
@@ -358,7 +396,7 @@ class FaceRecognition(BaseRecognition):
                 "name": name,
                 "embedding": np.array(embedding, dtype=np.float32).tobytes()  # Convert embedding to bytes
             }
-            redis_key = f"faces:{uuid}:{idx}"
+            redis_key = f"faces:{name}:{uuid}:{idx}"
             num_fields = self.redis_client.hset(redis_key, mapping=face_data)
             self.redis_client.expire(redis_key, ttl)
             self.get_logger().info(f"Stored face info with {num_fields} fields for {name} with UUID {uuid}:{idx} in Redis.")
@@ -445,6 +483,7 @@ class FaceRecognition(BaseRecognition):
         self.declare_parameter('model_path', 'weights/face_recognition/face_recognition.pth')
         self.declare_parameter("threshold", 0.8)
         self.declare_parameter("knn_threshold", 0.5)
+        self.declare_parameter("servers.forget_person.servername", "/fbot_vision/fr/forget_person")
         super().declareParameters()
 
     def readParameters(self):
@@ -453,6 +492,7 @@ class FaceRecognition(BaseRecognition):
         self.faceRecognitionTopic = self.get_parameter("publishers.face_recognition.topic").value
         self.faceRecognitionQosProfile = self.get_parameter("publishers.face_recognition.qos_profile").value
         self.introducePersonServername = self.get_parameter("servers.introduce_person.servername").value
+        self.forgetPersonServername = self.get_parameter("servers.forget_person.servername").value
         self.threshold = self.get_parameter("threshold").value
         self.knn_threshhold = self.get_parameter("knn_threshold").value
 
