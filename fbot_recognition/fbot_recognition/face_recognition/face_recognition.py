@@ -148,11 +148,12 @@ class FaceRecognition(BaseRecognition):
 
         face_detections = self.detectFacesInImage(cv_image)
 
+        self.unknown_idx = 0
+        
         if len(face_detections) > 0:
             nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections], len(face_detections))
             self.get_logger().info(f"Found {len(nearest_neighbours)} nearest neighbours for detected faces.")
 
-        unknown_idx = 0
         for idx, face_detection in enumerate(face_detections):
 
             confidence = face_detection['face_confidence']
@@ -408,7 +409,7 @@ class FaceRecognition(BaseRecognition):
     
     def searchKNN(self, embeddings, k=1):
         k=k*6
-        self.get_logger().info(f"Searching for {k} nearest neighbours for the provided embeddings.")
+        # self.get_logger().info(f"Searching for {k} nearest neighbours for the provided embeddings.")
         if not isinstance(embeddings, list):
             embeddings = [embeddings]
         if not embeddings:
@@ -473,7 +474,15 @@ class FaceRecognition(BaseRecognition):
                         final_results[i] = match
                         assigned_uuids.add(match["uuid"])
                         break
-
+        
+        for i in range(len(final_results)):
+            if final_results[i] is None:
+                final_results[i] = {
+                    "uuid": f"{self.unknown_idx}",
+                    "name": "unknown",
+                    "score": 0.0,
+                }
+                self.unknown_idx += 1
         return final_results
 
 
