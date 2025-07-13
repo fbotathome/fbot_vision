@@ -100,6 +100,9 @@ class YoloTrackerRecognition(BaseRecognition):
         self.unLoadTrackerModel()
         self.get_logger().info("Tracking stoped!!!")
         return resp
+    
+    def cosine_similarity(self, a, b):
+        return np.dot(a,b)/(np.linalg.norm(a)*np.linalg.norm(b)).item()
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         tracking = self.tracking
@@ -156,7 +159,7 @@ class YoloTrackerRecognition(BaseRecognition):
                 img_patchs.append(img[int(y1):int(y2),int(x1):int(x2)])
 
             # ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
-            features = self.feature_extractor(img_patchs)
+            features = self.feature_extractor(img_patchs).cpu().numpy()
             ids = results[0].boxes.id.cpu().numpy()
         for i, box in enumerate(bboxs):
             description = Detection2D()
@@ -190,7 +193,7 @@ class YoloTrackerRecognition(BaseRecognition):
                     is_id_found = True
                     tracked_box = description
 
-                if (not is_id_found) and (is_aged or self.trackID == -1) or torch.cosine_similarity(features[i].unsqueeze(0), self.tracked_feature.unsqueeze(0)).item() > 0.8:
+                if (not is_id_found) and (is_aged or self.trackID == -1) or self.cosine_similarity(features[i], self.tracked_feature) > 0.8:
                     if tracked_box is None or size > previus_size:
                         self.tracked_feature = features[i]
                         previus_size = size
