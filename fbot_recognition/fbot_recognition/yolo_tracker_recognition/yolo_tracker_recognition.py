@@ -193,7 +193,7 @@ class YoloTrackerRecognition(BaseRecognition):
                     is_id_found = True
                     tracked_box = description
 
-                if (not is_id_found) and (is_aged or self.trackID == -1) or self.cosine_similarity(features[i], self.tracked_feature) > 0.8:
+                if (not is_id_found) and (is_aged or self.trackID == -1) or ((not features is None) and self.cosine_similarity(features[i], self.tracked_feature) > 0.8:
                     if tracked_box is None or size > previus_size:
                         self.tracked_feature = features[i]
                         previus_size = size
