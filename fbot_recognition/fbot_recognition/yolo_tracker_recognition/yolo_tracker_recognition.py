@@ -72,7 +72,7 @@ class YoloTrackerRecognition(BaseRecognition):
         #     self.reid_img_size,
         #     device="cuda:0" if torch.cuda.is_available() else "cpu"
         # )
-        self.feature_extractor = FeatureExtractor(self.reid_model_name, self.reid_model_file)
+        self.feature_extractor = FeatureExtractor(self.reid_model_name, self.reid_model_file, device="cuda:0" if torch.cuda.is_available() else "cpu")
         # self.get_logger().info("DEPOIS REID")
 
     def unLoadModel(self):
