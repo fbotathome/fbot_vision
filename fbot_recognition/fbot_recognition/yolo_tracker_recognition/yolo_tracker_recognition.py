@@ -24,12 +24,15 @@ from visualization_msgs.msg import Marker, MarkerArray
 from builtin_interfaces.msg import Duration
 from ament_index_python.packages import get_package_share_directory
 
+from torchreid.utils import FeatureExtractor
+
 class YoloTrackerRecognition(BaseRecognition):
     def __init__(self, node_name):
         super().__init__(nodeName=node_name)
         self.tracking = False
         self.reid_manager = None
         self.lastTrack = perf_counter()
+        self.tracked_feature = None
         self.cv_bridge = cv_bridge.CvBridge()
         self.declareParameters()
         self.readParameters()
@@ -60,16 +63,17 @@ class YoloTrackerRecognition(BaseRecognition):
     def loadTrackerModel(self):
         if self.reid_manager != None:
             return
-        self.get_logger().info("ANTES REID")
-        self.reid_manager = ReIDManager(
-            self.reid_model_file,
-            self.reid_model_name,
-            self.reid_threshold,
-            self.reid_add_feature_threshold,
-            self.reid_img_size,
-            device="cuda:0" if torch.cuda.is_available() else "cpu"
-        )
-        self.get_logger().info("DEPOIS REID")
+        # self.get_logger().info("ANTES REID")
+        # self.reid_manager = ReIDManager(
+        #     self.reid_model_file,
+        #     self.reid_model_name,
+        #     self.reid_threshold,
+        #     self.reid_add_feature_threshold,
+        #     self.reid_img_size,
+        #     device="cuda:0" if torch.cuda.is_available() else "cpu"
+        # )
+        self.feature_extractor = FeatureExtractor(self.reid_model_name, self.reid_model_file)
+        # self.get_logger().info("DEPOIS REID")
 
     def unLoadModel(self):
         del self.model
@@ -113,9 +117,6 @@ class YoloTrackerRecognition(BaseRecognition):
         data = BoundingBoxProcessingData()
         data.sensor.setSensorData(camera_info, img_depth)
 
-        
-        # recognition.image_depth = img_depth
-        # recognition.camera_info = camera_info
         recognition.header = HEADER
         recognition.detections = []
         img = self.cv_bridge.imgmsg_to_cv2(img)
@@ -147,11 +148,15 @@ class YoloTrackerRecognition(BaseRecognition):
         new_id = -1
         # descriptions = []
         ids = []
+        features = None
+        self.feature_extractor : FeatureExtractor
         if results[0].boxes.is_track:
             img_patchs = []
             for x1,y1,x2,y2 in results[0].boxes.xyxy.cpu().numpy():
                 img_patchs.append(img[int(y1):int(y2),int(x1):int(x2)])
+
             # ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+            features = self.feature_extractor(img_patchs)
             ids = results[0].boxes.id.cpu().numpy()
         for i, box in enumerate(bboxs):
             description = Detection2D()
@@ -185,8 +190,9 @@ class YoloTrackerRecognition(BaseRecognition):
                     is_id_found = True
                     tracked_box = description
 
-                if (not is_id_found) and (is_aged or self.trackID == -1):
+                if (not is_id_found) and (is_aged or self.trackID == -1) or torch.cosine_similarity(features[i], self.tracked_feature).item() > 0.8:
                     if tracked_box is None or size > previus_size:
+                        self.tracked_feature = features[i]
                         previus_size = size
                         tracked_box = description
                         new_id = ID          
