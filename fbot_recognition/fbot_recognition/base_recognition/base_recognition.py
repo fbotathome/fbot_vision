@@ -9,6 +9,8 @@ import message_filters
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 
+from rclpy.qos import QoSProfile, ReliabilityPolicy,DurabilityPolicy,HistoryPolicy
+
 SOURCES_TYPES = {
         'camera_info': CameraInfo,
         'image_rgb': Image,
@@ -34,10 +36,18 @@ class BaseRecognition(Node):
         self.syncSubscribers(callbackObject.callback)
 
     def syncSubscribers(self, callbackObject):
+
+        qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         subscribers = []
         for source in SOURCES_TYPES:
             if source in self.topicsToSubscribe:
-                subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.topicsToSubscribe[source], qos_profile=self.qosProfile))
+                subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[source], self.topicsToSubscribe[source], qos_profile=qos))
         self._synchronizer = message_filters.ApproximateTimeSynchronizer(subscribers,queue_size=1, slop=self.slop)
         self._synchronizer.registerCallback(callbackObject)
 
