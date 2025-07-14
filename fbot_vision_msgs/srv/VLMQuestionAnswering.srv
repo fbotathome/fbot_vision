@@ -1,0 +1,10 @@
+string question
+bool use_image 
+sensor_msgs/Image image
+---
+builtin_interfaces/Time stamp
+string question
+int32 question_id
+string answer
+bool success
+float64 confidence
