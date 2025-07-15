@@ -3,4 +3,5 @@ int64 id                                  #local id on image (can come from dete
 int64 global_id                           #global id to identify a description (optional)
 string label                              #class detected by classification, detection, semantic segmentation or instance segmentation
 float64 timeout
+float64[] initial_angle
 ---
