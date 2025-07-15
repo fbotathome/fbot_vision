@@ -167,6 +167,10 @@ class FaceRecognition(BaseRecognition):
                 self.get_logger().error(f"{e}. Skipping detection")
                 continue
 
+            if np.linalg.norm([bbox3d.center.position.x, bbox3d.center.position.y, bbox3d.center.position.z]) < 0.05:
+                self.get_logger().warn(f"Face detection too close to the camera, skipping detection.")
+                continue
+
             if nearest_neighbours[idx]:
                 name = nearest_neighbours[idx]['name']
                 uuid = nearest_neighbours[idx]['uuid']
