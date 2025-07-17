@@ -74,7 +74,7 @@ class FaceRecognition(BaseRecognition):
         super().initRosComm(callbackObject=self)
     
     def forgetPersonCB(self, req: PeopleForgetting.Request, res: PeopleForgetting.Response):
-        self.get_logger().info(f"Received forget person request: {req.name}")
+        #self.get_logger().info(f"Received forget person request: {req.name}")
 
         num_deleted = self.deleteFaceEmbeddings(req.name, req.uuid, req.protected_names, req.protected_uuids)
 
@@ -135,7 +135,7 @@ class FaceRecognition(BaseRecognition):
         return res
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
-        self.get_logger().info("Face recognition callback triggered")
+        # self.get_logger().info("Face recognition callback triggered")
 
         # face_recognitions = FaceDetection3DArray()
         face_recognitions = Detection3DArray()
@@ -151,7 +151,7 @@ class FaceRecognition(BaseRecognition):
 
         if len(face_detections) > 0:
             nearest_neighbours = self.searchKNN([detection['embedding'] for detection in face_detections], len(face_detections))
-            self.get_logger().info(f"Found {len(nearest_neighbours)} nearest neighbours for detected faces.")
+            #self.get_logger().info(f"Found {len(nearest_neighbours)} nearest neighbours for detected faces.")
 
         for idx, face_detection in enumerate(face_detections):
 
@@ -215,13 +215,13 @@ class FaceRecognition(BaseRecognition):
     def detectFacesInImage(self, cv_image):
         detections=[]
         try:
-            self.get_logger().info("Running YOLO model for face detection")
+            #self.get_logger().info("Running YOLO model for face detection")
             results = self.yolo_model.track(cv_image, classes=0, conf=self.threshold, imgsz=480)
             boxes = results[0].boxes
-            self.get_logger().info(f"Detected {len(boxes)} faces")  
+            #self.get_logger().info(f"Detected {len(boxes)} faces")  
             
             for idx, box in enumerate(boxes):
-                self.get_logger().info(f"Processing box of index {idx}")
+                #self.get_logger().info(f"Processing box of index {idx}")
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 face_crop = cv_image[y1:y2, x1:x2]
 
@@ -295,7 +295,7 @@ class FaceRecognition(BaseRecognition):
         return faceDetection3D
 
     def configureRedis(self):
-        self.get_logger().info("Configuring Redis for face recognition")
+        #self.get_logger().info("Configuring Redis for face recognition")
         self.redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
         self.index_name = "face_recognition_index"
 
@@ -317,37 +317,37 @@ class FaceRecognition(BaseRecognition):
         # Check if the index already exists
         try:
             self.redis_client.ft(self.index_name).info()
-            self.get_logger().info("Redis index already exists.")
+            #self.get_logger().info("Redis index already exists.")
             # Verify if the existing index matches the defined schema
             index_info = self.redis_client.ft(self.index_name).info()
-            self.get_logger().info(f"Current index info: {index_info['attributes']}")
+            #self.get_logger().info(f"Current index info: {index_info['attributes']}")
 
             for attribute in index_info["attributes"]:
                 if 'embedding' in attribute and 'VECTOR' in attribute:
                     if (not self.embedding_dim in attribute) or (not self.distance_metric in attribute): 
-                        self.get_logger().info("Redis index schema mismatch, deleting and recreating the index.")
+                        #self.get_logger().info("Redis index schema mismatch, deleting and recreating the index.")
                         self.redis_client.ft(self.index_name).dropindex(delete_documents=True)
                         self.redis_client.ft(self.index_name).create_index(fields=schema, definition=definition)
                     break
         except redis.exceptions.ResponseError:
-            self.get_logger().info("Redis index does not exist, creating it.")
+            #self.get_logger().info("Redis index does not exist, creating it.")
             self.redis_client.ft(self.index_name).create_index(fields=schema, definition=definition)
         
         info = self.redis_client.ft(self.index_name).info()
-        self.get_logger().info(f"Redis index created. It has {info['num_docs']} documents.")
+        #self.get_logger().info(f"Redis index created. It has {info['num_docs']} documents.")
         
         ####
         # Delete existing documents in the Redis index
-        # self.get_logger().info("Deleting existing documents in Redis index.")
+        # #self.get_logger().info("Deleting existing documents in Redis index.")
         
         
         # try:
         #     keys = self.redis_client.keys("faces:*")
         #     if keys:
         #         self.redis_client.delete(*keys)
-        #         self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
+        #         #self.get_logger().info(f"Deleted {len(keys)} existing documents from Redis index.")
         #     else:
-        #         self.get_logger().info("No existing documents found in Redis index.")
+        #         #self.get_logger().info("No existing documents found in Redis index.")
         # except Exception as e:
         #     self.get_logger().error(f"Error while deleting existing documents: {e}")
         # ###
@@ -383,17 +383,17 @@ class FaceRecognition(BaseRecognition):
 
         if keys:
             self.redis_client.delete(*keys)
-            self.get_logger().info(f"Deleted {len(keys)} embeddings{add_message}.")
+            #self.get_logger().info(f"Deleted {len(keys)} embeddings{add_message}.")
             num_deleted = len(keys)
         else:
-            self.get_logger().info(f"No embeddings found to delete{add_message}.")
+            #self.get_logger().info(f"No embeddings found to delete{add_message}.")
             num_deleted = 0
 
         return num_deleted
 
     def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10*6):
         uuid = str(uuid4())
-        self.get_logger().info(f"Storing face embedding for {name} with UUID {uuid}.")
+        #self.get_logger().info(f"Storing face embedding for {name} with UUID {uuid}.")
         
         if not embeddings or len(embeddings) == 0:
             self.get_logger().warning(f"No embeddings provided for {name}. Skipping storage.")
@@ -412,13 +412,13 @@ class FaceRecognition(BaseRecognition):
             redis_key = f"faces:{name}:{uuid}:{idx}"
             num_fields = self.redis_client.hset(redis_key, mapping=face_data)
             self.redis_client.expire(redis_key, ttl)
-            self.get_logger().info(f"Stored face info with {num_fields} fields for {name} with UUID {uuid}:{idx} in Redis.")
+            #self.get_logger().info(f"Stored face info with {num_fields} fields for {name} with UUID {uuid}:{idx} in Redis.")
         
         return uuid
     
     def searchKNN(self, embeddings, k=1):
         k=k*6
-        # self.get_logger().info(f"Searching for {k} nearest neighbours for the provided embeddings.")
+        # #self.get_logger().info(f"Searching for {k} nearest neighbours for the provided embeddings.")
         if not isinstance(embeddings, list):
             embeddings = [embeddings]
         if not embeddings:
@@ -433,7 +433,7 @@ class FaceRecognition(BaseRecognition):
         results_list = []
 
         for i, embedding in enumerate(embeddings):
-            self.get_logger().info(f"Processing embedding {i+1}/{len(embeddings)}.")
+            #self.get_logger().info(f"Processing embedding {i+1}/{len(embeddings)}.")
             if len(embedding) != self.embedding_dim:
                 raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {len(embedding)}")
 
@@ -448,9 +448,9 @@ class FaceRecognition(BaseRecognition):
             uuid_to_best_match = {}
             for doc in result:
                 score = round(1 - float(doc.score), 2)
-                self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
+                #self.get_logger().info(f"Found {doc.name} with UUID {doc.uuid} and score {score}")
                 if score < self.knn_threshhold:
-                    self.get_logger().info(f"Score {score} is below threshold {self.knn_threshhold}, skipping {doc.name}.")
+                    #self.get_logger().info(f"Score {score} is below threshold {self.knn_threshhold}, skipping {doc.name}.")
                     continue
 
                 if doc.uuid not in uuid_to_best_match or score > uuid_to_best_match[doc.uuid]["score"]:
@@ -460,7 +460,7 @@ class FaceRecognition(BaseRecognition):
                         "score": score,
                     }
             
-            self.get_logger().info(f"Found {len(uuid_to_best_match)} unique matches for embedding {i+1}/{len(embeddings)}.")
+            #self.get_logger().info(f"Found {len(uuid_to_best_match)} unique matches for embedding {i+1}/{len(embeddings)}.")
             embedding_result = list(uuid_to_best_match.values())
             results_list.append(embedding_result)
 
