@@ -84,7 +84,7 @@ class FaceRecognition(BaseRecognition):
         return res
     
     def peopleIntroducingCB(self, req: PeopleIntroducing.Request, res: PeopleIntroducing.Response):
-        self.get_logger().info(f"Received introduce person request: {req.name}")
+        #self.get_logger().info(f"Received introduce person request: {req.name}")
         
         name = req.name
         num_images = req.num_images
@@ -92,12 +92,12 @@ class FaceRecognition(BaseRecognition):
         previous_detection = None
         face_embeddings = []
         for idx in range(num_images):
-            self.get_logger().info(f'Taking picture {idx+1} of {num_images} for {name}...')
+            #self.get_logger().info(f'Taking picture {idx+1} of {num_images} for {name}...')
             self.regressiveCounter(req.interval)
             num_retries = 3
             retry_count = 0
             while self.last_detection == previous_detection and retry_count < num_retries:
-                self.get_logger().info("Waiting for new face detection...")
+                #self.get_logger().info("Waiting for new face detection...")
                 self.regressiveCounter(1)
                 retry_count += 1
             if retry_count >= num_retries:
@@ -121,12 +121,12 @@ class FaceRecognition(BaseRecognition):
                 self.get_logger().warn("No face embedding found, skipping this image.")
                 continue
             face_embeddings.append(face_embedding)
-            self.get_logger().info(f"Appending face embedding {idx} for {name}.")
+            #self.get_logger().info(f"Appending face embedding {idx} for {name}.")
         
         try:
             res.uuid = self.storeFaceEmbeddings(name, face_embeddings)
             res.response = True
-            self.get_logger().info(f"Face embedding for {name} with stored successfully.")
+            #self.get_logger().info(f"Face embedding for {name} with stored successfully.")
         except ValueError as e:
             self.get_logger().error(f"Error storing face embeddings for {name}: {e}")
             res.response = False
@@ -135,7 +135,7 @@ class FaceRecognition(BaseRecognition):
         return res
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
-        # self.get_logger().info("Face recognition callback triggered")
+        #self.get_logger().info("Face recognition callback triggered")
 
         # face_recognitions = FaceDetection3DArray()
         face_recognitions = Detection3DArray()
@@ -205,7 +205,13 @@ class FaceRecognition(BaseRecognition):
         for detection in detections:
             pose = detection.bbox3d.center.position
             dist = np.linalg.norm([pose.x, pose.y, pose.z])
-            detections_with_dist.append((detection, dist))
+
+            # Filter out detections that exceed the maximum allowed distance
+            if dist <= self.faces_max_distance:
+                detections_with_dist.append((detection, dist))
+            else:
+                #self.get_logger().info(f"Detection at distance {dist:.2f} exceeds max distance {self.faces_max_distance:.2f} and will be excluded.")
+                continue
 
         detections_sorted = sorted(detections_with_dist, key=lambda x: x[1])
         detections_sorted = [detection[0] for detection in detections_sorted]
@@ -521,6 +527,7 @@ class FaceRecognition(BaseRecognition):
         self.embedding_dim = 512
         self.deepface_detector_backend = 'yolov8'
         self.distance_metric = 'COSINE'  # 'L2', 'IP' OR 'COSINE'
+        self.faces_max_distance = 4 #meters
 
         super().readParameters()
         self.modelPath = self.pkgPath + '/' + self.get_parameter('model_path').value
