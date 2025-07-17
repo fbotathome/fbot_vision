@@ -213,7 +213,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("model_file", "yolov8n.pt")
+        self.declare_parameter("model_file", "robocup2025.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         super().declareParameters()
 
