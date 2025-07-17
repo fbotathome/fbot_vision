@@ -150,10 +150,10 @@ class YoloV8Recognition(BaseRecognition):
         detection3d.header = detectionHeader
         detection3d.score = score
 
-        if '/' in label:
+        if '-' in label:
             detection3d.label = label
         else:
-            detection3d.label = f"none/{label}" if label[0].islower() else f"None/{label}"
+            detection3d.label = f"none-{label}" if label[0].islower() else f"None-{label}"
 
         if detection3d.label in self.labels_dict:
             self.labels_dict[detection3d.label] += 1
