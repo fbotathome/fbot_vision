@@ -6,7 +6,7 @@ yolov8_recognition:
     max_sizes:
         - [0.05, 0.05, 0.05]
 
-    model_file: yolov8n.pt
+    model_file: robocup2025.pt
 
     subscribers:
       
