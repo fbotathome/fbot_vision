@@ -64,5 +64,5 @@ yolo_tracker_recognition:
         reid: 0.75
         reid_feature_add: 0.7
         iou: 0.5
-        max_time: 60
+        max_time: 10
         max_age: 5
