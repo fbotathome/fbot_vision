@@ -7,10 +7,11 @@ match_thresh: 0.8  # threshold for matching tracks
 # min_box_area: 10  # threshold for min box areas(for tracker evaluation, not used for now)
 # mot20: False  # for tracker evaluation(not used for now)
 
+
 # BoT-SORT settings
 gmc_method: sparseOptFlow  # method of global motion compensation
 # ReID model related thresh (not supported yet)
 fuse_score: True
 proximity_thresh: 0.5
 appearance_thresh: 0.25
-with_reid: True
+with_reid: False
