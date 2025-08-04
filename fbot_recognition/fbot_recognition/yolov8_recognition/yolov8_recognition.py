@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 from PIL import Image as IMG
-from image2world.image2worldlib import *
+from image2world import BoundingBoxProcessingData, boundingBoxProcessing
 
 from std_msgs.msg import Header
 from std_srvs.srv import Empty
