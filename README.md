@@ -151,7 +151,7 @@ ros2 service call /fbot_vision/vlm/answer_history/query \
 |-------|------|-------------|
 | `/fbot_vision/fr/object_recognition` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D object detections |
 | `/fbot_vision/pt/tracking3D` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D person tracking |
-| `/fbot_vision/face_recognition/detections` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D face recognition |
+| `/fbot_vision/fr/face_recognition` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D face recognition |
 | `/fbot_vision/vlm/question_answering/query` | [`VLMQuestion`](fbot_vision_msgs/msg/VLMQuestion.msg) | VLM questions |
 | `/fbot_vision/vlm/question_answering/answer` | [`VLMAnswer`](fbot_vision_msgs/msg/VLMAnswer.msg) | VLM responses |
 
