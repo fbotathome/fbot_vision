@@ -32,7 +32,7 @@ fbot_vision/
 |   ├── 📁 base_recognition/      # Abstract base class for all recognition modules
 │   ├── 📁 face_recognition/      # Face detection and recognition
 │   ├── 📁 yolov8_recognition/    # Object detection with YOLOv8
-│   └── 📁 yolo_tracker_recognition/ # Multi-object tracking
+│   └── 📁 yolo_tracker_recognition/ # People tracking
 ├── 📁 fbot_vlm/                  # Vision Language Model integration
 └── 📁 fbot_vision_msgs/          # Custom ROS message definitions
 ```
