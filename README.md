@@ -111,9 +111,34 @@ ros2 service call /fbot_vision/face_recognition/people_introducing \
 # Launch VLM service
 ros2 launch fbot_vlm vlm.launch.py
 
-# Ask questions about the scene
+# Ask questions about the current camera view (uses live camera feed)
 ros2 service call /fbot_vision/vlm/question_answering/query \
-    fbot_vision_msgs/srv/VLMQuestionAnswering "{question: 'What do you see?'}"
+    fbot_vision_msgs/srv/VLMQuestionAnswering "{question: 'What do you see?', use_image: true}"
+
+# Ask text-only questions (no image processing)
+ros2 service call /fbot_vision/vlm/question_answering/query \
+    fbot_vision_msgs/srv/VLMQuestionAnswering "{question: 'What is the capital of France?', use_image: false}"
+
+# Ask questions about a specific image (provide custom image)
+ros2 service call /fbot_vision/vlm/question_answering/query \
+    fbot_vision_msgs/srv/VLMQuestionAnswering "{
+        question: 'Describe this image in detail', 
+        use_image: true,
+        image: {
+            header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'camera_link'},
+            height: 480, width: 640, encoding: 'rgb8',
+            is_bigendian: false, step: 1920,
+            data: [/* image data bytes */]
+        }
+    }"
+
+# Get VLM conversation history
+ros2 service call /fbot_vision/vlm/answer_history/query \
+    fbot_vision_msgs/srv/VLMAnswerHistory "{questions_filter: []}"
+
+# Get history for specific questions only
+ros2 service call /fbot_vision/vlm/answer_history/query \
+    fbot_vision_msgs/srv/VLMAnswerHistory "{questions_filter: ['What do you see?', 'Describe the scene']}"
 ```
 
 ---
