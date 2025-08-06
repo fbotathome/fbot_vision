@@ -1,4 +1,5 @@
-# fbot_vision
+<img width="3876" height="719" alt="fbot_vision" src="https://github.com/user-attachments/assets/845c6a57-4888-4036-92bc-6d978ad1d721" />
+
 
 ## TODO
 
