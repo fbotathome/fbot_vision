@@ -29,7 +29,7 @@ The system consists of three main packages:
 ```
 fbot_vision/
 ├── fbot_recognition/          # Core recognition algorithms
-    ├── base_recognition/      # Abstract base class for all recognition modules
+|    ├── base_recognition/      # Abstract base class for all recognition modules
 │   ├── face_recognition/      # Face detection and recognition
 │   ├── yolov8_recognition/    # Object detection with YOLOv8
 │   └── yolo_tracker_recognition/ # Multi-object tracking
