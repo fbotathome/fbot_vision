@@ -172,6 +172,7 @@ ros2 service call /fbot_vision/vlm/answer_history/query \
 | `/fbot_vision/vlm/answer_history/query` | [`VLMAnswerHistory`](fbot_vision_msgs/srv/VLMAnswerHistory.srv) | Get VLM conversation history |
 | `/fbot_vision/face_recognition/people_introducing` | [`PeopleIntroducing`](fbot_vision_msgs/srv/PeopleIntroducing.srv) | Register new person |
 | `/fbot_vision/face_recognition/people_forgetting` | [`PeopleForgetting`](fbot_vision_msgs/srv/PeopleForgetting.srv) | Forget an existing person |
+| `/fbot_vision/look_at_description` | [`LookAtDescription3D`](fbot_vision_msgs/srv/LookAtDescription3D.srv) | Look at specific 3D detection |
 
 ---
 
