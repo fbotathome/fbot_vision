@@ -3,3 +3,4 @@ int32 num_images
 float64 interval
 ---
 bool response
+string uuid
