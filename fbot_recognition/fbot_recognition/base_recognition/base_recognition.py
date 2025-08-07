@@ -50,7 +50,7 @@ class BaseRecognition(Node):
     def loadModel(self):
         raise NotImplementedError("loadModel must be implemented on recognition node class")
 
-    def unLoadModel(self):
+    def unloadModel(self):
         raise NotImplementedError("unloadModel must be implemented on recognition node class")
 
     def callback(self, *args):

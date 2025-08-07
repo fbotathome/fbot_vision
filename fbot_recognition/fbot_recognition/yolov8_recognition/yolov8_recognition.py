@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import rclpy
 import copy
+
+import rclpy
 import numpy as np
 import torch
-
 from ultralytics import YOLO
 from PIL import Image as IMG
-from image2world.image2worldlib import *
-from fbot_recognition import BaseRecognition
-from rclpy.lifecycle import LifecycleNode
+from image2world import BoundingBoxProcessingData, boundingBoxProcessing
 
 from std_msgs.msg import Header
 from std_srvs.srv import Empty
 from builtin_interfaces.msg import Duration
 from sensor_msgs.msg import Image, CameraInfo
 from visualization_msgs.msg import Marker, MarkerArray
-from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
+from fbot_recognition import BaseRecognition
+from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -50,7 +49,7 @@ class YoloV8Recognition(BaseRecognition):
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
-    def unLoadModel(self) -> None:
+    def unloadModel(self) -> None:
         del self.model
         torch.cuda.empty_cache()
         self.model = None
@@ -62,7 +61,7 @@ class YoloV8Recognition(BaseRecognition):
 
     def _stopRecognition(self):
         self.run = False
-        self.unLoadModel()
+        self.unloadModel()
         self.get_logger().info("Stopping Object Recognition!!!")
 
     def startRecognition(self, req: Empty.Request, resp: Empty.Response):
@@ -210,29 +209,6 @@ class YoloV8Recognition(BaseRecognition):
             marker.text = '{} ({:.2f})'.format(name, det.score)
             marker.lifetime = duration
             markers.markers.append(marker)
-
-            for idx, kpt3D in enumerate(det.pose):
-                if kpt3D.score > 0:
-                    marker = Marker()
-                    marker.header = det.header
-                    marker.type = Marker.SPHERE
-                    marker.id = idx
-                    marker.color.r = color[1]
-                    marker.color.g = color[2]
-                    marker.color.b = color[0]
-                    marker.color.a = 1
-                    marker.scale.x = 0.05
-                    marker.scale.y = 0.05
-                    marker.scale.z = 0.05
-                    marker.pose.position.x = kpt3D.x
-                    marker.pose.position.y = kpt3D.y
-                    marker.pose.position.z = kpt3D.z
-                    marker.pose.orientation.x = 0.0
-                    marker.pose.orientation.y = 0.0
-                    marker.pose.orientation.z = 0.0
-                    marker.pose.orientation.w = 1.0
-                    marker.lifetime = duration
-                    markers.markers.append(marker)
         
         self.markerPublisher.publish(markers)
 
@@ -242,7 +218,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("model_file", "yolov8n.pt")
+        self.declare_parameter("model_file", "robocup2025.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         self.declare_parameter("start_on_init", True)
         self.declare_parameter("services.object_recognition.start", "/fbot_vision/fr/object_start")
