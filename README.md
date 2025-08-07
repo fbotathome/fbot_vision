@@ -106,6 +106,11 @@ ros2 service call /fbot_vision/face_recognition/people_introducing \
     fbot_vision_msgs/srv/PeopleIntroducing "{name: 'John Doe'}"
 ```
 
+# Forget an existing person from database
+ros2 service call /fbot_vision/face_recognition/people_forgetting \
+    fbot_vision_msgs/srv/PeopleForgetting "{name: 'John Doe'}"
+```
+
 ### Vision Language Model
 ```bash
 # Launch VLM service
@@ -166,7 +171,7 @@ ros2 service call /fbot_vision/vlm/answer_history/query \
 | `/fbot_vision/vlm/question_answering/query` | [`VLMQuestionAnswering`](fbot_vision_msgs/srv/VLMQuestionAnswering.srv) | Ask VLM questions |
 | `/fbot_vision/vlm/answer_history/query` | [`VLMAnswerHistory`](fbot_vision_msgs/srv/VLMAnswerHistory.srv) | Get VLM conversation history |
 | `/fbot_vision/face_recognition/people_introducing` | [`PeopleIntroducing`](fbot_vision_msgs/srv/PeopleIntroducing.srv) | Register new person |
-| `/fbot_vision/look_at_description` | [`LookAtDescription3D`](fbot_vision_msgs/srv/LookAtDescription3D.srv) | Look at specific 3D detection |
+| `/fbot_vision/face_recognition/people_forgetting` | [`PeopleForgetting`](fbot_vision_msgs/srv/PeopleForgetting.srv) | Forget an existing person |
 
 ---
 
