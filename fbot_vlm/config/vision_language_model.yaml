@@ -1,0 +1,19 @@
+vision_language_model:
+    ros__parameters:
+
+        subscribers:
+            image_rgb:
+                topic: /fbot_vision/camera/color/image_raw
+                timeout: 5
+            question:
+                topic: /fbot_vision/vlm/question_answering/question
+        
+        publishers:
+            answer:
+                topic: /fbot_vision/vlm/question_answering/answer
+
+        servers:
+            question_answering:
+                service: /fbot_vision/vlm/question_answering/query
+            answer_history:
+                service: /fbot_vision/vlm/answer_history/query
