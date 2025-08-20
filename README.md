@@ -62,7 +62,7 @@ fbot_vision/
    sudo rosdep init  # Skip if already initialized
    rosdep update
    rosdep install --from-paths src --ignore-src -r -y
-   pip install -r src/fbot_behavior/requirements.txt
+   pip install -r src/fbot_vision/requirements.txt
    ```
 
 3. **Build the workspace:**
