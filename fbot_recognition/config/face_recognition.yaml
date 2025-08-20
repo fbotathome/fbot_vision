@@ -2,6 +2,7 @@ face_recognition:
   ros__parameters:
 
     threshold: 0.5
+    knn_threshold: 0.5
 
     subscribers:
       
@@ -26,3 +27,5 @@ face_recognition:
 
       introduce_person:
         service: /fbot_vision/fr/introduce_person
+      forget_person:
+        service: /fbot_vision/fr/forget_person
