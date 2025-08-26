@@ -111,9 +111,8 @@ ros2 service call /fbot_vision/face_recognition/people_forgetting \
 
 ```
 
-```
-
 ### Vision Language Model
+
 ```bash
 # Launch VLM service
 ros2 launch fbot_vlm vlm.launch.py
