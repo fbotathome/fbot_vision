@@ -104,11 +104,13 @@ ros2 launch fbot_recognition face_recognition.launch.py
 # Introduce a new person
 ros2 service call /fbot_vision/face_recognition/people_introducing \
     fbot_vision_msgs/srv/PeopleIntroducing "{name: 'John Doe'}"
-```
 
 # Forget an existing person from database
 ros2 service call /fbot_vision/face_recognition/people_forgetting \
     fbot_vision_msgs/srv/PeopleForgetting "{name: 'John Doe'}"
+
+```
+
 ```
 
 ### Vision Language Model
