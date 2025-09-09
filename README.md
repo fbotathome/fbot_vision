@@ -122,8 +122,6 @@ ros2 launch fbot_recognition moondream_object_recognition.launch.py use_remote:=
 ros2 topic pub /fbot_vision/fr/object_prompt std_msgs/String "data: 'cup'"
 ```
 
----
-
 ### Vision Language Model
 
 ```bash
