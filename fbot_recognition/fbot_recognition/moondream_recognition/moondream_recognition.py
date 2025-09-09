@@ -20,12 +20,6 @@ from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 
 from ament_index_python.packages import get_package_share_directory
-
-#TODO: Allocate and deallocate model in the right way
-#TODO: Make the unloadModel function a service
-#TODO: Filter the area inside the house by using i2w.inPolygonFilter()
-#TODO: Need one declare parameters and one read parameters functions
-
 class MoondreamRecognition(BaseRecognition):
     def __init__(self) -> None:
         super().__init__(nodeName='moondream_recognition')
@@ -39,7 +33,7 @@ class MoondreamRecognition(BaseRecognition):
 
     def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
-        self.markerPublisher = self.create_publisher(MarkerArray, 'pub/markers', qos_profile=self.debugQosProfile)
+        self.markerPublisher = self.create_publisher(MarkerArray, 'fbot_vision/fr/moondream_markers', qos_profile=self.debugQosProfile)
         self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
         self.objectPromptSubscriber = self.create_subscription(String, self.objectPromptTopic, qos_profile=self.qosProfile, callback=self.updateObjectPrompt)
         super().initRosComm(callbackObject=self)
@@ -64,8 +58,6 @@ class MoondreamRecognition(BaseRecognition):
         self.current_class = msg.data
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
-
-        self.get_logger().info("=> Entering callback ")
 
         if self.current_class == "":
             self.get_logger().info("Waiting for object prompt to be set ...")
@@ -212,29 +204,6 @@ class MoondreamRecognition(BaseRecognition):
             marker.text = '{} ({:.2f})'.format(name, det.score)
             marker.lifetime = duration
             markers.markers.append(marker)
-
-            for idx, kpt3D in enumerate(det.pose):
-                if kpt3D.score > 0:
-                    marker = Marker()
-                    marker.header = det.header
-                    marker.type = Marker.SPHERE
-                    marker.id = idx
-                    marker.color.r = color[1]
-                    marker.color.g = color[2]
-                    marker.color.b = color[0]
-                    marker.color.a = 1
-                    marker.scale.x = 0.05
-                    marker.scale.y = 0.05
-                    marker.scale.z = 0.05
-                    marker.pose.position.x = kpt3D.x
-                    marker.pose.position.y = kpt3D.y
-                    marker.pose.position.z = kpt3D.z
-                    marker.pose.orientation.x = 0.0
-                    marker.pose.orientation.y = 0.0
-                    marker.pose.orientation.z = 0.0
-                    marker.pose.orientation.w = 1.0
-                    marker.lifetime = duration
-                    markers.markers.append(marker)
         
         self.markerPublisher.publish(markers)
 
@@ -243,7 +212,7 @@ class MoondreamRecognition(BaseRecognition):
         self.declare_parameter("publishers.debug.qos_profile", 1)
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
-        self.declare_parameter("max_sizes", [5.0, 5.0, 5.0])
+        self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         self.declare_parameter("subscribers.object_prompt", "/fbot_vision/fr/object_prompt")
         super().declareParameters()
 
