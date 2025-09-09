@@ -1,0 +1,8 @@
+string name
+string uuid
+
+string[] protected_names
+string[] protected_uuids
+---
+bool success
+int32 num_deleted
