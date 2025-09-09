@@ -56,18 +56,12 @@ class FaceRecognition(BaseRecognition):
         """
         super().__init__(packageName='fbot_recognition', nodeName='face_recognition')
         packagePath = get_package_share_directory('fbot_recognition')
-        datasetPath = os.path.join(packagePath, 'dataset')
-        self.featuresPath = os.path.join(datasetPath, 'features')
-        self.peopleDatasetPath = os.path.join(datasetPath, 'people/')
         self.declareParameters()
         self.readParameters()
         
         self.configureRedis()
 
         self.yolo_model = YOLO(os.path.join(packagePath, 'weights/yolov8l_100e.pt'))
-
-        knownFacesDict = self.loadVar('features')
-        self.knownFaces = self.flatten(knownFacesDict)
         time.sleep(2)
         self.initRosComm()
 
