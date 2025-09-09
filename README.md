@@ -31,8 +31,9 @@ fbot_vision/
 ├── 📁 fbot_recognition/          # Core recognition algorithms
 |   ├── 📁 base_recognition/      # Abstract base class for all recognition modules
 │   ├── 📁 face_recognition/      # Face detection and recognition
-│   ├── 📁 yolov8_recognition/    # Object detection with YOLOv8
-│   └── 📁 yolo_tracker_recognition/ # People tracking
+│   ├── 📁 moondream_recognition/ # Object recognition using VLM Moondream2
+│   ├── 📁 yolo_tracker_recognition/ # People tracking
+│   └── 📁 yolov8_recognition/    # Object detection with YOLOv8
 ├── 📁 fbot_vlm/                  # Vision Language Model integration
 └── 📁 fbot_vision_msgs/          # Custom ROS message definitions
 ```
@@ -111,6 +112,16 @@ ros2 service call /fbot_vision/face_recognition/people_forgetting \
 
 ```
 
+
+### Moondream Object Recognition
+```bash
+# Launch Moondream object recognition (local)
+ros2 launch fbot_recognition moondream_object_recognition.launch.py use_remote:=false use_realsense:=True
+
+# Set the object prompt (class to detect)
+ros2 topic pub /fbot_vision/fr/object_prompt std_msgs/String "data: 'cup'"
+```
+
 ### Vision Language Model
 
 ```bash
@@ -160,6 +171,7 @@ ros2 service call /fbot_vision/vlm/answer_history/query \
 | `/fbot_vision/fr/face_recognition` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D face recognition |
 | `/fbot_vision/vlm/question_answering/query` | [`VLMQuestion`](fbot_vision_msgs/msg/VLMQuestion.msg) | VLM questions |
 | `/fbot_vision/vlm/question_answering/answer` | [`VLMAnswer`](fbot_vision_msgs/msg/VLMAnswer.msg) | VLM responses |
+| `/fbot_vision/fr/object_prompt` | `std_msgs/String` | Object prompt for Moondream |
 
 ### Services
 

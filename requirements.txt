@@ -2,3 +2,5 @@ image2world
 open3d
 ultralytics
 reidmanager
+transformers
+accelerate
