@@ -17,8 +17,15 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Detection2DArray.msg"
   "msg/Detection3D.msg"
   "msg/Detection3DArray.msg"
+  "msg/FaceDetection3D.msg"
+  "msg/FaceDetection3DArray.msg"
+  "msg/VLMQuestion.msg"
+  "msg/VLMAnswer.msg"
   "srv/PeopleIntroducing.srv"
   "srv/LookAtDescription3D.srv"
+  "srv/VLMQuestionAnswering.srv"
+  "srv/VLMAnswerHistory.srv"
+  "srv/PeopleForgetting.srv"
   DEPENDENCIES std_msgs geometry_msgs sensor_msgs vision_msgs
 )
 
