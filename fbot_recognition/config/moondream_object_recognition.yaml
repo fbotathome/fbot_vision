@@ -17,9 +17,9 @@ moondream_recognition:
     publishers:
 
       object_recognition:
-        topic: /fbot_vision/fr/object_recognition
+        topic: /fbot_vision/fr/moondream_recognition
         qos_profile: 10
 
       debug:
-        topic: /fbot_vision/fr/object_debug
+        topic: /fbot_vision/fr/moondream_debug
         qos_profile: 10
