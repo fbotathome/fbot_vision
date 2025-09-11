@@ -4,3 +4,7 @@ langchain-openai
 langchain-google-genai
 dotoenv
 Pillow
+#adicionando para o quiz:
+langchain
+langchain-community
+ollama

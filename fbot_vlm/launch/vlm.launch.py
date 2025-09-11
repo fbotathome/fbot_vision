@@ -11,7 +11,7 @@ def generate_launch_description():
     config_file_path = os.path.join(
         get_package_share_directory('fbot_vlm'),
         'config',
-        'vision_language_model.yaml'
+        'quiz_config.yaml'
         )
 
     declared_arguments = []
@@ -39,7 +39,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             'vlm_api_host',
-            default_value='http://192.168.0.106:11434',
+            default_value='http://192.168.1.189:11434',
             description='Host URL for the VLM API. Must be set for openai and ollama.'
         ))
 

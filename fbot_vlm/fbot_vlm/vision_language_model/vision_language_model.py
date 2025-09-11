@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 import requests
 from requests.exceptions import RequestException
 
+from langchain_community.chat_models import ChatOllama
+
 try:
     from langchain_ollama import ChatOllama
 except:
