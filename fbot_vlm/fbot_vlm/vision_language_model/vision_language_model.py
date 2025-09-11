@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 import requests
 from requests.exceptions import RequestException
 
-from langchain_community.chat_models import ChatOllama
+# from langchain_community.chat_models import ChatOllama
 
 try:
     from langchain_ollama import ChatOllama
@@ -307,7 +307,7 @@ class VisionLanguageModel(Node):
 
         self.declareParametersFromDict(config)
         self.declare_parameter('vlm_api_type', 'ollama')
-        self.declare_parameter('vlm_api_host', 'http://localhost:11434')
+        self.declare_parameter('vlm_api_host', 'http://jetson:11434')
         self.declare_parameter('vlm_api_model', 'gemma3:4b')
             
     def declareParametersFromDict(self, params, path='') -> None:

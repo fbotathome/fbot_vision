@@ -2,5 +2,5 @@ vision_language_model:
   ros__parameters:
     vlm_api_type: "ollama"
     vlm_api_model: "gemma3:4b"
-    vlm_api_host: "http://localhost:11434"
+    vlm_api_host: "jetson:11434"
     llm_temperature: 0.0

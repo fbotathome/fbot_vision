@@ -39,7 +39,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             'vlm_api_host',
-            default_value='http://192.168.1.189:11434',
+            default_value='jetson:11434',
             description='Host URL for the VLM API. Must be set for openai and ollama.'
         ))
 
