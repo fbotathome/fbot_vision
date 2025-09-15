@@ -195,3 +195,50 @@ ros2 service call /fbot_vision/vlm/answer_history/query \
 2. Commit your changes (`git commit -m 'Add amazing feature'`)
 3. Push to the branch (`git push origin feat/amazing-feature`)
 4. Open a Pull Request
+
+---
+
+## Camera-LiDAR Person Fusion Tracker
+
+Node: `camera_lidar_person_tracker` (package `fbot_recognition`). Fuses YOLO person detections with LiDAR points plus depth fallback to produce robust 3D person tracks.
+
+Launch:
+```bash
+ros2 launch fbot_recognition camera_lidar_person_tracker.launch.py
+```
+
+Key params:
+- `fusion.lidar.use` (bool, default True) Enable LiDAR usage.
+- `fusion.lidar.min_points` (int, default 15) Min projected LiDAR points inside bbox.
+- `fusion.priority` (lidar|depth, default lidar) Strategy: prefer LiDAR or depth fallback.
+
+Published topics:
+- `/fbot_vision/fr/recognition2D` (Detection2DArray)
+- `/fbot_vision/fr/recognition3D` (Detection3DArray)
+- `/fbot_vision/pt/tracking2D` (Detection2DArray, tracking on)
+- `/fbot_vision/pt/tracking3D` (Detection3DArray, tracking on)
+- `/fbot_vision/fr/debug` (Image, green bbox=fused LiDAR success, red=fallback)
+- `/fbot_vision/fr/markers` (MarkerArray)
+
+Tracking services:
+```bash
+ros2 service call /fbot_vision/pt/start std_srvs/srv/Empty
+ros2 service call /fbot_vision/pt/stop std_srvs/srv/Empty
+```
+
+Override example:
+```bash
+ros2 launch fbot_recognition camera_lidar_person_tracker.launch.py \
+    --ros-args -p fusion.lidar.min_points:=10 -p fusion.priority:=depth
+```
+
+Requirements: TF transform from LiDAR frame to camera frame, populated CameraInfo K matrix, LiDAR topic `/lidar/points` or override via `subscribers.lidar.topic`.
+
+Parity & Enhancements vs original `yolo_tracker_recognition`:
+* Adds LiDAR-first 3D box estimation with depth fallback.
+* Preserves primary-person selection (largest bbox aging logic with `tracking.thresholds.max_time`).
+* Publishes single primary track on tracking topics (blue rectangle highlight).
+* Retains 2D pose keypoints (green; cyan for primary) with parameter `debug_kpt_threshold`.
+* Adds configurable `fusion.priority` and `fusion.lidar.min_points`.
+* Keypoints rendered as 3D markers when 3D pose becomes available in future extensions.
+

@@ -29,6 +29,7 @@ setup(
             'yolo_tracker_recognition = fbot_recognition.yolo_tracker_recognition.yolo_tracker_recognition:main',
             'face_recognition = fbot_recognition.face_recognition.face_recognition:main',
             'moondream_recognition = fbot_recognition.moondream_recognition.moondream_recognition:main',
+            'camera_lidar_person_tracker = fbot_recognition.yolo_tracker_recognition.camera_lidar_person_tracker:main',
         ],
     },
 )
