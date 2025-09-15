@@ -16,6 +16,8 @@ yolo_tracker_recognition:
       image_rgb: /fbot_vision/camera/color/image_raw
       camera_info: /fbot_vision/camera/color/camera_info
       image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
+      lidar:
+        topic: /lidar/points
 
     services:
     
@@ -66,3 +68,9 @@ yolo_tracker_recognition:
         iou: 0.5
         max_time: 60
         max_age: 5
+
+    fusion:
+      lidar:
+        min_points: 15
+        use: True
+      priority: lidar   # lidar | depth
