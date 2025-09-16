@@ -321,7 +321,8 @@ class FaceRecognition(BaseRecognition):
         """!
         @brief Configure Redis vector database for face embeddings
         """
-        self.redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        self.redis_client = redis.Redis(host=self.redis_host, port=self.redis_port, decode_responses=True)
+        self.get_logger().info(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
         self.index_name = "face_recognition_index"
 
         # Define the schema for the index
@@ -512,6 +513,8 @@ class FaceRecognition(BaseRecognition):
         self.declare_parameter('model_path', 'weights/face_recognition/face_recognition.pth')
         self.declare_parameter("threshold", 0.8)
         self.declare_parameter("knn_threshold", 0.5)
+        self.declare_parameter("redis_host", "localhost")
+        self.declare_parameter("redis_port", 6379)
         self.declare_parameter("servers.forget_person.servername", "/fbot_vision/fr/forget_person")
         super().declareParameters()
 
@@ -527,6 +530,8 @@ class FaceRecognition(BaseRecognition):
         self.forgetPersonServername = self.get_parameter("servers.forget_person.servername").value
         self.threshold = self.get_parameter("threshold").value
         self.knn_threshhold = self.get_parameter("knn_threshold").value
+        self.redis_host = self.get_parameter("redis_host").value
+        self.redis_port = self.get_parameter("redis_port").value
 
         self.deepface_model_name = 'Facenet512'
         self.embedding_dim = 512
