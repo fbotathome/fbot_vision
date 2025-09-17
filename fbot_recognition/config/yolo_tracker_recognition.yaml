@@ -4,9 +4,10 @@ yolo_tracker_recognition:
     model_file: yolo11n-pose.pt
     debug_kpt_threshold: 0.5
 
-    max_sizes:
-        - [2.5, 2.5, 2.5] #trocar no codigo
+    max_sizes: [2.5, 2.5, 2.5]
 
+    debug:
+      publish_lidar_points: true
 
     subscribers:
       
@@ -16,6 +17,9 @@ yolo_tracker_recognition:
       image_rgb: /fbot_vision/camera/color/image_raw
       camera_info: /fbot_vision/camera/color/camera_info
       image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
+      lidar_points: /fbot_vision/camera/depth/color/points
+
+    camera_optical_frame: camera_color_optical_frame
 
     services:
     
@@ -47,6 +51,10 @@ yolo_tracker_recognition:
       
       markers:
         topic: /fbot_vision/fr/markers
+        qos_profile: 10
+
+      lidar_debug:
+        topic: /fbot_vision/fr/lidar_points_debug
         qos_profile: 10
 
     tracking:

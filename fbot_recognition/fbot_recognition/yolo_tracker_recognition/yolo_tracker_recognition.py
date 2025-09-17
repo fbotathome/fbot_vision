@@ -15,7 +15,7 @@ from fbot_recognition import BaseRecognition
 import numpy as np
 
 from fbot_vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray, KeyPoint2D, KeyPoint3D
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from std_msgs.msg import Header
 from std_srvs.srv import Empty
@@ -23,10 +23,28 @@ from std_srvs.srv import Empty
 from visualization_msgs.msg import Marker, MarkerArray
 from builtin_interfaces.msg import Duration
 from ament_index_python.packages import get_package_share_directory
+import message_filters
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+import sensor_msgs_py.point_cloud2 as pc2
+
+# Add TF2 imports
+import tf2_ros
+import tf2_geometry_msgs
+from geometry_msgs.msg import PointStamped
+
+SOURCES_TYPES = {
+        'camera_info': CameraInfo,
+        'image_rgb': Image,
+        'image_depth': Image
+    }
 
 class YoloTrackerRecognition(BaseRecognition):
     def __init__(self, node_name):
         super().__init__(nodeName=node_name)
+        # Initialize TF2 buffer and listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        
         self.tracking = False
         self.reid_manager = None
         self.lastTrack = perf_counter()
@@ -41,15 +59,37 @@ class YoloTrackerRecognition(BaseRecognition):
         # self.loadModel()
 
     def initRosComm(self):
-        super().initRosComm(self)
+        self.syncSubscribers()
         self.debugPub = self.create_publisher(Image, self.debug_topic, qos_profile=1)
         self.recognitionPub = self.create_publisher(Detection2DArray, self.recognition_topic, qos_profile=self.recognition_qs)
         self.recognition3DPub = self.create_publisher(Detection3DArray, self.recognition3D_topic, qos_profile=self.recognition3D_qs)
         self.trackingPub = self.create_publisher(Detection2DArray, self.tracking_topic, qos_profile=self.tracking_qs)
         self.tracking3DPub = self.create_publisher(Detection3DArray, self.tracking3D_topic, qos_profile=self.tracking3D_qs)
-        self.markerPublisher = self.create_publisher(MarkerArray,self.markers_topic,qos_profile=self.markers_qs)        
+        self.markerPublisher = self.create_publisher(MarkerArray,self.markers_topic,qos_profile=self.markers_qs)
+        # Optional lidar debug publisher
+        if self.debug_publish_lidar:
+            self.lidarDebugPub = self.create_publisher(PointCloud2, self.lidar_debug_topic, qos_profile=self.lidar_debug_qs)
+        else:
+            self.lidarDebugPub = None
         self.trackingStartService = self.create_service(Empty, self.start_tracking_topic, self.startTracking)
         self.trackingStopService = self.create_service(Empty, self.stop_tracking_topic, self.stopTracking)
+    
+    def syncSubscribers(self):
+        subscribers = []
+        qos = QoSProfile(history=QoSHistoryPolicy.KEEP_LAST, depth=self.qosProfile,reliability=QoSReliabilityPolicy.BEST_EFFORT)
+        
+        # Ensure a consistent order for subscribers
+        sub_topics = ['image_rgb', 'camera_info', 'image_depth']
+        
+        for topic in sub_topics:
+            if topic in self.topicsToSubscribe and topic in SOURCES_TYPES:
+                subscribers.append(message_filters.Subscriber(self, SOURCES_TYPES[topic], self.topicsToSubscribe[topic], qos_profile=qos))
+
+        # Add lidar subscriber
+        subscribers.append(message_filters.Subscriber(self, PointCloud2, self.lidar_points_topic, qos_profile=qos))
+        
+        self._synchronizer = message_filters.ApproximateTimeSynchronizer(subscribers, queue_size=1, slop=self.slop)
+        self._synchronizer.registerCallback(self.callback)
     
     def loadModel(self):
         self.get_logger().info(f"Loading model: {self.model_file}")
@@ -92,8 +132,89 @@ class YoloTrackerRecognition(BaseRecognition):
         self.tracking = False
         self.unLoadTrackerModel()
         self.get_logger().info("Tracking stoped!!!")
+        return resp
 
-    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
+    def extractLidarDepth(self, pointCloudMsg: PointCloud2, bbox: BoundingBox2D, cameraInfo: CameraInfo, transform=None):
+        """
+        Extract median depth from lidar point cloud for a given 2D bounding box.
+        Expects point cloud to already be in camera optical frame.
+        Returns median depth in meters, the projected 2D points, and the filtered 3D points.
+        """
+        # Convert point cloud to numpy array once
+        pc_data = pc2.read_points(pointCloudMsg, field_names=("x", "y", "z"), skip_nans=True)
+        points = np.array(list(pc_data))
+        
+        if len(points) == 0:
+            return None, None, None
+        
+        # If transform provided, apply it to all points at once using matrix operations
+        if transform is not None:
+            # Convert quaternion to rotation matrix
+            q = transform.transform.rotation
+            rotation_matrix = np.array([
+                [1 - 2*q.y*q.y - 2*q.z*q.z, 2*q.x*q.y - 2*q.z*q.w, 2*q.x*q.z + 2*q.y*q.w],
+                [2*q.x*q.y + 2*q.z*q.w, 1 - 2*q.x*q.x - 2*q.z*q.z, 2*q.y*q.z - 2*q.x*q.w],
+                [2*q.x*q.z - 2*q.y*q.w, 2*q.y*q.z + 2*q.x*q.w, 1 - 2*q.x*q.x - 2*q.y*q.y]
+            ])
+            
+            translation = np.array([
+                transform.transform.translation.x,
+                transform.transform.translation.y,
+                transform.transform.translation.z
+            ])
+            
+            # Apply transformation: rotation @ points.T + translation
+            points_transformed = rotation_matrix @ points.T + translation[:, np.newaxis]
+            points = points_transformed.T
+        
+        # Pre-compute camera intrinsics for efficiency
+        fx = cameraInfo.k[0]
+        fy = cameraInfo.k[4]
+        cx = cameraInfo.k[2]
+        cy = cameraInfo.k[5]
+        
+        # Vectorized projection for all points at once
+        z_valid = points[:, 2] > 0.1  # min depth 10cm
+        if not np.any(z_valid):
+            return None, None, None
+            
+        valid_points = points[z_valid]
+        u_all = (valid_points[:, 0] * fx / valid_points[:, 2]) + cx
+        v_all = (valid_points[:, 1] * fy / valid_points[:, 2]) + cy
+        
+        # Bounding box bounds
+        x_min = bbox.center.position.x - bbox.size_x / 2
+        x_max = bbox.center.position.x + bbox.size_x / 2
+        y_min = bbox.center.position.y - bbox.size_y / 2
+        y_max = bbox.center.position.y + bbox.size_y / 2
+        
+        # Filter points within bounding box
+        bbox_mask = (u_all >= x_min) & (u_all <= x_max) & (v_all >= y_min) & (v_all <= y_max)
+        
+        if not np.any(bbox_mask):
+            return None, None, None
+            
+        depths = valid_points[bbox_mask, 2]
+        points_3d_in_bbox = valid_points[bbox_mask]
+        
+        # Use more robust depth estimation with outlier filtering
+        if len(depths) > 3:
+            q75, q25 = np.percentile(depths, [75, 25])
+            iqr = q75 - q25
+            lower_bound = q25 - 1.5 * iqr
+            upper_bound = q75 + 1.5 * iqr
+            filtered_depths = depths[(depths >= lower_bound) & (depths <= upper_bound)]
+            if len(filtered_depths) > 0:
+                median_depth = np.median(filtered_depths)
+            else:
+                median_depth = np.median(depths)  # fallback
+        else:
+            median_depth = np.median(depths)
+        
+        used_points_2d = np.column_stack((u_all[bbox_mask], v_all[bbox_mask]))
+        return median_depth, used_points_2d, points_3d_in_bbox
+
+    def callback(self, imageMsg: Image, cameraInfoMsg: CameraInfo, depthMsg: Image, pointCloudMsg: PointCloud2):
         tracking = self.tracking
 
         img = imageMsg
@@ -101,23 +222,39 @@ class YoloTrackerRecognition(BaseRecognition):
         camera_info = cameraInfoMsg
         HEADER = img.header
 
+        # Cache TF transform for this callback
+        cached_transform = None
+        
+        try:
+            # Get transform once per callback if point cloud is in a different frame
+            target_frame = self.camera_optical_frame
+            source_frame = pointCloudMsg.header.frame_id
+            if source_frame != target_frame:
+                cached_transform = self.tf_buffer.lookup_transform(
+                    target_frame,
+                    source_frame,
+                    pointCloudMsg.header.stamp,
+                    rclpy.duration.Duration(seconds=1.0)
+                )
+                self.get_logger().debug(f"Cached transform from {source_frame} to {target_frame}")
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            self.get_logger().warn(f"Could not get transform from {pointCloudMsg.header.frame_id} to {self.camera_optical_frame}: {e}")
+            # Continue without lidar data, will fallback to camera depth
+
         recognition = Detection2DArray()
         recognition.image_rgb = img
 
         recognition3D = Detection3DArray()
         recognition3D.image_rgb = img
         data = BoundingBoxProcessingData()
-        data.sensor.setSensorData(camera_info, img_depth)
-
         
-        # recognition.image_depth = img_depth
-        # recognition.camera_info = camera_info
+        original_depth_msg = img_depth
+        data.sensor.setSensorData(camera_info, original_depth_msg)
+
         recognition.header = HEADER
         recognition.detections = []
         img = self.cv_bridge.imgmsg_to_cv2(img)
-
-        debug_img = deepcopy(img)
-        debug_img = cv.cvtColor(debug_img, cv.COLOR_BGR2RGB)
+        debug_img = cv.cvtColor(img, cv.COLOR_BGR2RGB)  # Convert once at the beginning
         results = None
         bboxs   = None
 
@@ -132,6 +269,10 @@ class YoloTrackerRecognition(BaseRecognition):
         else:
             results = list(self.model.predict(img, verbose=False, stream=True))
             bboxs = results[0].boxes.data.cpu().numpy()
+
+        # Early return if no detections
+        if len(bboxs) == 0:
+            return
 
         people_ids = []
 
@@ -199,12 +340,9 @@ class YoloTrackerRecognition(BaseRecognition):
         if tracked_box is not None:
             track_recognition.header = recognition.header
             track_recognition.image_rgb = recognition.image_rgb
-            # track_recognition.image_depth = recognition.image_depth
-            # track_recognition.camera_info = recognition.camera_info
             tracked_description.type = Detection2D.DETECTION
             if not is_id_found:
                 self.trackID = new_id
-            # recognition.descriptions.append(tracked_box)
             self.lastTrack = now
             cv.rectangle(debug_img,(int(tracked_box.bbox.center.position.x-tracked_box.bbox.size_x/2),\
                                     int(tracked_box.bbox.center.position.y-tracked_box.bbox.size_y/2)),\
@@ -254,6 +392,45 @@ class YoloTrackerRecognition(BaseRecognition):
             data.boundingBox2D.size_x = description.bbox.size_x
             data.boundingBox2D.size_y = description.bbox.size_y
             data.maxSize.x, data.maxSize.y, data.maxSize.z = self.max_sizes
+            
+            # Try to get lidar depth
+            lidar_depth, lidar_points_2d, lidar_points_3d = self.extractLidarDepth(pointCloudMsg, data.boundingBox2D, camera_info, cached_transform)
+            
+            if lidar_depth is not None and lidar_points_3d is not None:
+                # If lidar provides depth, create a temporary depth image with this data
+                depth_cv = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint16)
+                x1 = int(description.bbox.center.position.x - description.bbox.size_x / 2)
+                x2 = int(description.bbox.center.position.x + description.bbox.size_x / 2)
+                y1 = int(description.bbox.center.position.y - description.bbox.size_y / 2)
+                y2 = int(description.bbox.center.position.y + description.bbox.size_y / 2)
+                # Clip to image bounds
+                x1, x2 = max(0, x1), min(depth_cv.shape[1], x2)
+                y1, y2 = max(0, y1), min(depth_cv.shape[0], y2)
+
+                if x2 > x1 and y2 > y1:
+                    depth_cv[y1:y2, x1:x2] = int(lidar_depth * 1000)  # Convert meters to millimeters
+                    modified_depth_msg = self.cv_bridge.cv2_to_imgmsg(depth_cv, encoding="passthrough")
+                    modified_depth_msg.header = HEADER
+                    data.sensor.setSensorData(camera_info, modified_depth_msg)
+                    
+                    # Publish the 3D points used for debugging
+                    if self.debug_publish_lidar and self.lidarDebugPub is not None:
+                        header = Header(stamp=self.get_clock().now().to_msg(), frame_id=self.camera_optical_frame)
+                        pc_msg = pc2.create_cloud_xyz32(header, lidar_points_3d)
+                        self.lidarDebugPub.publish(pc_msg)
+
+                        # Visual feedback for debugging: draw 2D projected lidar points
+                        if lidar_points_2d is not None:
+                            for point in lidar_points_2d:
+                                px, py = int(point[0]), int(point[1])
+                                if 0 <= px < debug_img.shape[1] and 0 <= py < debug_img.shape[0]:
+                                    cv.circle(debug_img, (px, py), 2, (255, 0, 0), -1)
+                    self.get_logger().debug(f"Used lidar depth {lidar_depth:.2f}m for detection.")
+            else:
+                # Fallback to original camera depth if lidar fails
+                data.sensor.setSensorData(camera_info, original_depth_msg)
+                self.get_logger().debug(f"Lidar depth failed, using camera depth as fallback.")
+
             try:
                 bbox3D = boundingBoxProcessing(data)
             except Exception as e:
@@ -270,8 +447,9 @@ class YoloTrackerRecognition(BaseRecognition):
             
             recognition3D.detections.append(description3D)
 
-        track_recognition.detections.append(tracked_description)
-        # debug_msg = ros_numpy.msgify(Image, debug_img, encoding='bgr8')
+        if tracked_description is not None:
+            track_recognition.detections.append(tracked_description)
+        
         debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
         debug_msg.header = HEADER
         self.debugPub.publish(debug_msg)
@@ -288,6 +466,11 @@ class YoloTrackerRecognition(BaseRecognition):
     def createDetection3d(self, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str, id : int = 0 , global_id : int=0, pose : list = []) -> Detection3D:
         detection3d = Detection3D()
         detection3d.header = detectionHeader
+        # Ensure frame_id is set for proper TF transformations
+        if not detection3d.header.frame_id:
+            detection3d.header.frame_id = self.camera_optical_frame
+        # Set poses_header for compatibility with TrackedPersonPoseState
+        detection3d.poses_header = detectionHeader
         detection3d.id = id
         detection3d.global_id = global_id
         detection3d.label = label
@@ -381,6 +564,11 @@ class YoloTrackerRecognition(BaseRecognition):
         super().declareParameters()
         self.declare_parameter("publishers.debug.topic","/fbot_vision/fr/debug")
 
+        # Lidar debug controls
+        self.declare_parameter("debug.publish_lidar_points", True)
+        self.declare_parameter("publishers.lidar_debug.topic", "/fbot_vision/fr/lidar_points_debug")
+        self.declare_parameter("publishers.lidar_debug.qos_profile", 10)
+
         self.declare_parameter("publishers.recognition.topic", "/fbot_vision/fr/recognition2D")
         self.declare_parameter("publishers.recognition.qos_profile", 10)
         
@@ -398,6 +586,10 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.declare_parameter("services.tracking.start","/fbot_vision/pt/start")
         self.declare_parameter("services.tracking.stop","/fbot_vision/pt/stop")
+
+        self.declare_parameter("subscribers.lidar_points", "/fbot_vision/lidar/points")
+
+        self.declare_parameter("camera_optical_frame", "camera_color_optical_frame")
 
         self.declare_parameter("debug_kpt_threshold", 0.5)
 
@@ -428,6 +620,11 @@ class YoloTrackerRecognition(BaseRecognition):
         super().readParameters()
         self.debug_topic = self.get_parameter("publishers.debug.topic").value
 
+        # Lidar debug controls
+        self.debug_publish_lidar = self.get_parameter("debug.publish_lidar_points").value
+        self.lidar_debug_topic = self.get_parameter("publishers.lidar_debug.topic").value
+        self.lidar_debug_qs = self.get_parameter("publishers.lidar_debug.qos_profile").value
+
         self.recognition_topic = self.get_parameter("publishers.recognition.topic").value
         self.recognition_qs = self.get_parameter("publishers.recognition.qos_profile").value
 
@@ -447,6 +644,9 @@ class YoloTrackerRecognition(BaseRecognition):
         self.markers_qs = self.get_parameter("publishers.markers.qos_profile").value
 
         self.threshold = self.get_parameter("debug_kpt_threshold").value
+
+        self.lidar_points_topic = self.get_parameter("subscribers.lidar_points").value
+        self.camera_optical_frame = self.get_parameter("camera_optical_frame").value
 
         share_directory = get_package_share_directory("fbot_recognition")
 
