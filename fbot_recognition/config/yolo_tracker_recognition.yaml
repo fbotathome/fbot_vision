@@ -52,6 +52,21 @@ yolo_tracker_recognition:
     tracking:
       start_on_init: False
       
+      filters:
+        min_detection_size: 50
+        max_overlap_ratio: 0.7
+        max_detections: 20
+        max_reid_detections: 10
+      
+      recovery:
+        enabled: true
+        max_frames: 10
+        search_radius: 100
+      
+      smoothing:
+        enabled: true
+        alpha: 0.3
+
       reid:
         model_file: resnet_reid_model.pt
         model_name: resnet50
@@ -60,9 +75,9 @@ yolo_tracker_recognition:
           width: 128
 
       thresholds:
-        detection: 0.5
+        detection: 0.7
         reid: 0.75
         reid_feature_add: 0.7
-        iou: 0.5
+        iou: 0.6
         max_time: 60
         max_age: 5

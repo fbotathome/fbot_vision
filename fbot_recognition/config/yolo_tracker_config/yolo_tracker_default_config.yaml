@@ -1,8 +1,8 @@
 tracker_type: botsort  # tracker type, ['botsort', 'bytetrack']
-track_high_thresh: 0.5  # threshold for the first association
-track_low_thresh: 0.1  # threshold for the second association
-new_track_thresh: 0.6  # threshold for init new track if the detection does not match any tracks
-track_buffer: 1  # buffer to calculate the time when to remove tracks
+track_high_thresh: 0.6  # threshold for the first association - increased for crowded scenes
+track_low_thresh: 0.2  # threshold for the second association - increased to reduce false associations
+new_track_thresh: 0.7  # threshold for init new track if the detection does not match any tracks - increased
+track_buffer: 3  # buffer to calculate the time when to remove tracks - increased to maintain tracks longer
 match_thresh: 0.8  # threshold for matching tracks
 # min_box_area: 10  # threshold for min box areas(for tracker evaluation, not used for now)
 # mot20: False  # for tracker evaluation(not used for now)
@@ -11,6 +11,6 @@ match_thresh: 0.8  # threshold for matching tracks
 gmc_method: sparseOptFlow  # method of global motion compensation
 # ReID model related thresh (not supported yet)
 fuse_score: True
-proximity_thresh: 0.5
-appearance_thresh: 0.25
+proximity_thresh: 0.6  # increased for better proximity matching in crowds
+appearance_thresh: 0.3  # increased for more reliable appearance matching
 with_reid: True

@@ -31,6 +31,17 @@ class YoloTrackerRecognition(BaseRecognition):
         self.reid_manager = None
         self.lastTrack = perf_counter()
         self.cv_bridge = cv_bridge.CvBridge()
+        
+        # Track recovery state
+        self.recovery_mode = False
+        self.recovery_frames = 0
+        self.last_known_position = None
+        self.last_known_velocity = (0, 0)
+        
+        # Track smoothing state
+        self.smoothed_position = None
+        self.smoothed_size = None
+        
         self.declareParameters()
         self.readParameters()
         self.loadModel()
@@ -38,7 +49,6 @@ class YoloTrackerRecognition(BaseRecognition):
         if self.tracking_on_init:
             self.startTracking()
         self.get_logger().info(f"Node started!!!")
-        # self.loadModel()
 
     def initRosComm(self):
         super().initRosComm(self)
@@ -93,6 +103,225 @@ class YoloTrackerRecognition(BaseRecognition):
         self.unLoadTrackerModel()
         self.get_logger().info("Tracking stoped!!!")
 
+    def filterDetections(self, bboxs):
+        """
+        Filter detections for crowded environments:
+        - Remove detections smaller than minimum size
+        - Remove highly overlapping detections
+        - Limit maximum number of detections
+        """
+        if len(bboxs) == 0:
+            return bboxs
+            
+        filtered_bboxs = []
+        
+        # First pass: filter by size
+        for box in bboxs:
+            x1, y1, x2, y2 = box[:4]
+            area = (x2 - x1) * (y2 - y1)
+            if area >= self.min_detection_size:
+                filtered_bboxs.append(box)
+        
+        if len(filtered_bboxs) <= self.max_detections:
+            return filtered_bboxs
+            
+        # Second pass: filter by overlap (keep highest confidence detections)
+        # Sort by confidence score (descending)
+        filtered_bboxs.sort(key=lambda x: x[-2], reverse=True)
+        
+        final_bboxs = []
+        for box in filtered_bboxs:
+            if len(final_bboxs) >= self.max_detections:
+                break
+                
+            # Check overlap with already selected boxes
+            should_add = True
+            x1, y1, x2, y2 = box[:4]
+            
+            for selected_box in final_bboxs:
+                sx1, sy1, sx2, sy2 = selected_box[:4]
+                
+                # Calculate IoU
+                inter_x1 = max(x1, sx1)
+                inter_y1 = max(y1, sy1)
+                inter_x2 = min(x2, sx2)
+                inter_y2 = min(y2, sy2)
+                
+                if inter_x2 > inter_x1 and inter_y2 > inter_y1:
+                    inter_area = (inter_x2 - inter_x1) * (inter_y2 - inter_y1)
+                    box_area = (x2 - x1) * (y2 - y1)
+                    selected_area = (sx2 - sx1) * (sy2 - sy1)
+                    
+                    iou = inter_area / (box_area + selected_area - inter_area)
+                    if iou > self.max_overlap_ratio:
+                        should_add = False
+                        break
+            
+            if should_add:
+                final_bboxs.append(box)
+        
+        return final_bboxs
+
+    def selectBestTrack(self, person_detections, image_width, image_height):
+        """
+        Select the best track to follow in crowded environments using multiple heuristics:
+        - Center proximity
+        - Size (moderate size preferred over extremes)
+        - Confidence score
+        - Distance from previous track (if available)
+        """
+        if not person_detections:
+            return None
+            
+        if len(person_detections) == 1:
+            return person_detections[0]
+            
+        best_detection = None
+        best_score = -float('inf')
+        
+        # Image center
+        img_center_x = image_width / 2
+        img_center_y = image_height / 2
+        
+        for detection in person_detections:
+            # Base score from confidence
+            score = detection.score
+            
+            # Center proximity bonus (prefer detections closer to center)
+            bbox_center_x = detection.bbox.center.position.x
+            bbox_center_y = detection.bbox.center.position.y
+            center_distance = ((bbox_center_x - img_center_x) ** 2 + (bbox_center_y - img_center_y) ** 2) ** 0.5
+            max_distance = ((image_width ** 2 + image_height ** 2) ** 0.5) / 2
+            center_bonus = 1.0 - (center_distance / max_distance)
+            score += center_bonus * 0.3  # Weight center proximity
+            
+            # Size preference (moderate sizes preferred)
+            bbox_area = detection.bbox.size_x * detection.bbox.size_y
+            max_area = image_width * image_height * 0.5  # Half image area as reference
+            size_ratio = min(bbox_area / max_area, 1.0)
+            # Prefer moderate sizes (not too small, not too large)
+            size_bonus = 1.0 - abs(size_ratio - 0.3) / 0.3  # Peak at 30% of image area
+            score += size_bonus * 0.2
+            
+            # Distance from previous track (if available and recent)
+            if hasattr(self, 'last_track_position') and hasattr(self, 'last_track_time'):
+                time_diff = perf_counter() - self.last_track_time
+                if time_diff < 2.0:  # Only consider recent tracks
+                    track_distance = ((bbox_center_x - self.last_track_position[0]) ** 2 + 
+                                    (bbox_center_y - self.last_track_position[1]) ** 2) ** 0.5
+                    # Prefer tracks that haven't moved too far (smooth motion)
+                    motion_penalty = min(track_distance / 100, 1.0)  # 100 pixels threshold
+                    score -= motion_penalty * 0.2
+            
+            if score > best_score:
+                best_score = score
+                best_detection = detection
+        
+        # Update last track position for future reference
+        if best_detection:
+            self.last_track_position = (best_detection.bbox.center.position.x, 
+                                      best_detection.bbox.center.position.y)
+            self.last_track_time = perf_counter()
+        
+        return best_detection
+
+    def attemptTrackRecovery(self, person_detections, image_width, image_height):
+        """
+        Attempt to recover a lost track by predicting position and finding best match
+        """
+        if not self.track_recovery_enabled or not self.last_known_position:
+            return None
+            
+        # Predict next position based on last known velocity
+        predicted_x = self.last_known_position[0] + self.last_known_velocity[0]
+        predicted_y = self.last_known_position[1] + self.last_known_velocity[1]
+        
+        best_match = None
+        best_score = float('inf')
+        
+        for detection in person_detections:
+            # Calculate distance from predicted position
+            dx = detection.bbox.center.position.x - predicted_x
+            dy = detection.bbox.center.position.y - predicted_y
+            distance = (dx**2 + dy**2)**0.5
+            
+            if distance <= self.track_recovery_search_radius:
+                # Score based on distance and confidence
+                score = distance / self.track_recovery_search_radius + (1.0 - detection.score)
+                
+                if score < best_score:
+                    best_score = score
+                    best_match = detection
+        
+        return best_match
+
+    def updateTrackRecoveryState(self, tracked_detection):
+        """
+        Update recovery state based on current tracking status
+        """
+        if tracked_detection:
+            current_pos = (tracked_detection.bbox.center.position.x, 
+                         tracked_detection.bbox.center.position.y)
+            
+            if self.last_known_position:
+                # Update velocity estimate
+                self.last_known_velocity = (
+                    current_pos[0] - self.last_known_position[0],
+                    current_pos[1] - self.last_known_position[1]
+                )
+            
+            self.last_known_position = current_pos
+            self.recovery_mode = False
+            self.recovery_frames = 0
+        else:
+            # Track lost - enter recovery mode
+            if not self.recovery_mode:
+                self.recovery_mode = True
+                self.recovery_frames = 0
+            else:
+                self.recovery_frames += 1
+                
+            # Exit recovery mode if too many frames have passed
+            if self.recovery_frames >= self.track_recovery_max_frames:
+                self.recovery_mode = False
+                self.recovery_frames = 0
+                self.last_known_position = None
+                self.last_known_velocity = (0, 0)
+
+    def applyTrackSmoothing(self, detection):
+        """
+        Apply exponential smoothing to track position and size for stability
+        """
+        if not self.track_smoothing_enabled or not detection:
+            return detection
+            
+        current_pos = (detection.bbox.center.position.x, detection.bbox.center.position.y)
+        current_size = (detection.bbox.size_x, detection.bbox.size_y)
+        
+        if self.smoothed_position is None:
+            # Initialize smoothing
+            self.smoothed_position = current_pos
+            self.smoothed_size = current_size
+        else:
+            # Apply exponential smoothing
+            self.smoothed_position = (
+                self.track_smoothing_alpha * current_pos[0] + (1 - self.track_smoothing_alpha) * self.smoothed_position[0],
+                self.track_smoothing_alpha * current_pos[1] + (1 - self.track_smoothing_alpha) * self.smoothed_position[1]
+            )
+            self.smoothed_size = (
+                self.track_smoothing_alpha * current_size[0] + (1 - self.track_smoothing_alpha) * self.smoothed_size[0],
+                self.track_smoothing_alpha * current_size[1] + (1 - self.track_smoothing_alpha) * self.smoothed_size[1]
+            )
+        
+        # Create smoothed detection
+        smoothed_detection = deepcopy(detection)
+        smoothed_detection.bbox.center.position.x = self.smoothed_position[0]
+        smoothed_detection.bbox.center.position.y = self.smoothed_position[1]
+        smoothed_detection.bbox.size_x = self.smoothed_size[0]
+        smoothed_detection.bbox.size_y = self.smoothed_size[1]
+        
+        return smoothed_detection
+
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         tracking = self.tracking
 
@@ -133,27 +362,58 @@ class YoloTrackerRecognition(BaseRecognition):
             results = list(self.model.predict(img, verbose=False, stream=True))
             bboxs = results[0].boxes.data.cpu().numpy()
 
+        # Filter detections for crowded environments
+        bboxs = self.filterDetections(bboxs)
+
         people_ids = []
 
         tracked_box = None
         now = perf_counter()
         is_aged = (now - self.lastTrack >= self.max_time)
         is_id_found = False
-        previus_size = float("-inf")
         new_id = -1
-        # descriptions = []
+        
+        # Collect person detections for track selection
+        person_detections = []
+        
         ids = []
+        reid_processed_indices = []
         if results[0].boxes.is_track:
+            # Limit ReID processing for performance in crowded scenes
+            track_ids = results[0].boxes.id.cpu().numpy()
+            xyxy_boxes = results[0].boxes.xyxy.cpu().numpy()
+            
+            # Prioritize detections: sort by confidence and limit processing
+            if len(track_ids) > self.max_reid_detections:
+                # Get indices sorted by confidence (highest first)
+                conf_scores = results[0].boxes.conf.cpu().numpy()
+                sorted_indices = np.argsort(conf_scores)[::-1][:self.max_reid_detections]
+                
+                track_ids = track_ids[sorted_indices]
+                xyxy_boxes = xyxy_boxes[sorted_indices]
+                reid_processed_indices = sorted_indices
+            
             img_patchs = []
-            for x1,y1,x2,y2 in results[0].boxes.xyxy.cpu().numpy():
+            for x1,y1,x2,y2 in xyxy_boxes:
                 img_patchs.append(img[int(y1):int(y2),int(x1):int(x2)])
-            ids = self.reid_manager.extract_ids(results[0].boxes.id.cpu().numpy(),img_patchs)
+            ids = self.reid_manager.extract_ids(track_ids, img_patchs)
         for i, box in enumerate(bboxs):
             description = Detection2D()
             description.header = HEADER
 
             X1,Y1,X2,Y2 = box[:4]
-            ID = int(ids[i]) if self.tracking and len(box) == 7 else -1
+            # Handle ReID: only available for processed detections
+            ID = -1
+            if self.tracking and len(box) == 7:
+                if len(ids) == len(bboxs):
+                    # All detections processed
+                    ID = int(ids[i])
+                elif len(reid_processed_indices) > 0 and i in reid_processed_indices:
+                    # Only some detections processed - find the corresponding ID
+                    processed_idx = np.where(reid_processed_indices == i)[0]
+                    if len(processed_idx) > 0:
+                        ID = int(ids[processed_idx[0]])
+            
             score = box[-2]
             clss = int(box[-1])
 
@@ -171,8 +431,9 @@ class YoloTrackerRecognition(BaseRecognition):
             if tracking:
                 description.global_id = ID
                 if description.label == "person":
-                    people_ids.append(ID)                 
-                
+                    people_ids.append(ID)
+                    person_detections.append(description)
+                    
                 box_label = f"ID:{ID} "
                 size = description.bbox.size_x * description.bbox.size_y
 
@@ -180,18 +441,30 @@ class YoloTrackerRecognition(BaseRecognition):
                     is_id_found = True
                     tracked_box = description
 
-                if (not is_id_found) and (is_aged or self.trackID == -1):
-                    if tracked_box is None or size > previus_size:
-                        previus_size = size
-                        tracked_box = description
-                        new_id = ID          
-
             recognition.detections.append(description)
             
             
 
             cv.rectangle(debug_img,(int(X1),int(Y1)), (int(X2),int(Y2)),(0,0,255),thickness=2)
             cv.putText(debug_img,f"{box_label}{self.model.names[clss]}:{score:.2f}", (int(X1), int(Y1)), cv.FONT_HERSHEY_SIMPLEX,0.75,(0,0,255),thickness=2)
+        
+        # Improved track selection for crowded environments
+        if tracking and (not is_id_found) and (is_aged or self.trackID == -1) and person_detections:
+            tracked_box = self.selectBestTrack(person_detections, img.shape[1], img.shape[0])
+            if tracked_box:
+                new_id = tracked_box.global_id
+        
+        # Track recovery for crowded environments
+        if tracking and not is_id_found and self.recovery_mode and person_detections:
+            recovered_track = self.attemptTrackRecovery(person_detections, img.shape[1], img.shape[0])
+            if recovered_track:
+                tracked_box = recovered_track
+                new_id = recovered_track.global_id
+                self.get_logger().info(f"Track recovered after {self.recovery_frames} frames")
+        
+        # Update recovery state
+        if tracking:
+            self.updateTrackRecoveryState(tracked_box)
         
         track_recognition = Detection2DArray()
         track_recognition.header = HEADER
@@ -201,6 +474,10 @@ class YoloTrackerRecognition(BaseRecognition):
             track_recognition.image_rgb = recognition.image_rgb
             # track_recognition.image_depth = recognition.image_depth
             # track_recognition.camera_info = recognition.camera_info
+            
+            # Apply smoothing for stable tracking
+            tracked_description = self.applyTrackSmoothing(tracked_box)
+            
             tracked_description.type = Detection2D.DETECTION
             if not is_id_found:
                 self.trackID = new_id
@@ -413,6 +690,17 @@ class YoloTrackerRecognition(BaseRecognition):
         self.declare_parameter("tracking.thresholds.max_age",5)
         self.declare_parameter("tracking.start_on_init", False)
 
+        # Detection filtering parameters for crowded environments
+        self.declare_parameter("tracking.filters.min_detection_size", 50)  # minimum bounding box area
+        self.declare_parameter("tracking.filters.max_overlap_ratio", 0.7)  # maximum overlap ratio to filter
+        self.declare_parameter("tracking.filters.max_detections", 20)  # maximum number of detections to process
+        self.declare_parameter("tracking.filters.max_reid_detections", 10)  # maximum detections for ReID processing
+        self.declare_parameter("tracking.recovery.enabled", True)  # enable track recovery
+        self.declare_parameter("tracking.recovery.max_frames", 10)  # maximum frames to attempt recovery
+        self.declare_parameter("tracking.recovery.search_radius", 100)  # pixel radius to search for recovery
+        self.declare_parameter("tracking.smoothing.enabled", True)  # enable track smoothing
+        self.declare_parameter("tracking.smoothing.alpha", 0.3)  # smoothing factor (0-1, higher = more smoothing)
+
         self.declare_parameter("tracking.reid.img_size.height",256)
         self.declare_parameter("tracking.reid.img_size.width",128)
 
@@ -461,6 +749,22 @@ class YoloTrackerRecognition(BaseRecognition):
         self.max_time = self.get_parameter("tracking.thresholds.max_time").value
         self.max_age = self.get_parameter("tracking.thresholds.max_age").value
         self.tracking_on_init = self.get_parameter("tracking.start_on_init").value
+        
+        # Detection filtering parameters
+        self.min_detection_size = self.get_parameter("tracking.filters.min_detection_size").value
+        self.max_overlap_ratio = self.get_parameter("tracking.filters.max_overlap_ratio").value
+        self.max_detections = self.get_parameter("tracking.filters.max_detections").value
+        self.max_reid_detections = self.get_parameter("tracking.filters.max_reid_detections").value
+        
+        # Track recovery parameters
+        self.track_recovery_enabled = self.get_parameter("tracking.recovery.enabled").value
+        self.track_recovery_max_frames = self.get_parameter("tracking.recovery.max_frames").value
+        self.track_recovery_search_radius = self.get_parameter("tracking.recovery.search_radius").value
+        
+        # Track smoothing parameters
+        self.track_smoothing_enabled = self.get_parameter("tracking.smoothing.enabled").value
+        self.track_smoothing_alpha = self.get_parameter("tracking.smoothing.alpha").value
+        
         self.tracker_cfg_file = share_directory + "/config/yolo_tracker_config/" + self.get_parameter("tracking.config_file").value
 
         self.reid_img_size = (self.get_parameter("tracking.reid.img_size.height").value,self.get_parameter("tracking.reid.img_size.width").value)
