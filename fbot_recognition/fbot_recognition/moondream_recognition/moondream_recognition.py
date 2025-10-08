@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import rclpy
 import copy
+import time
 import numpy as np
 import cv2
 import torch
@@ -60,7 +61,8 @@ class MoondreamRecognition(BaseRecognition):
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
         if self.current_class == "":
-            # self.get_logger().warn("Waiting for object prompt to be set ...")
+            if time.time() % 5 < 0.1:
+                self.get_logger().warn("Waiting for object prompt to be set ...")
             return
 
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
