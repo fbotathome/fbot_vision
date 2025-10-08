@@ -60,7 +60,7 @@ class MoondreamRecognition(BaseRecognition):
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
         if self.current_class == "":
-            self.get_logger().info("Waiting for object prompt to be set ...")
+            # self.get_logger().warn("Waiting for object prompt to be set ...")
             return
 
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:

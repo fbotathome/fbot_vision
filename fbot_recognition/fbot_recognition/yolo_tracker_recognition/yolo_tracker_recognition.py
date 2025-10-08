@@ -127,7 +127,7 @@ class YoloTrackerRecognition(BaseRecognition):
                                         iou=self.iou_threshold,
                                         device="cuda:0",
                                         tracker=self.tracker_cfg_file,
-                                        verbose=True, stream=True))
+                                        verbose=False, stream=True))
             bboxs = results[0].boxes.data.cpu().numpy()
         else:
             results = list(self.model.predict(img, verbose=False, stream=True))
