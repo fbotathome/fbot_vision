@@ -1,0 +1,37 @@
+# Parameters for laser_people_detector nodes
+# Edit the model_file path to point to your ONNX model
+
+/laser_model_host:
+  ros__parameters:
+    model_file: "$(find fbot_recognition)/resource/LFE_PPN.onnx"
+    laser_topic: "/scan"
+    output_topic: "detected_people"
+    marker_topic: "detected_people_markers"
+    scan_near: 0.02
+    scan_far: 10.0
+    score_threshold: 0.937660
+    use_cuda: false
+
+/laser_people_follower:
+  ros__parameters:
+    # Topics
+    detections_topic: "detected_people"
+    cmd_vel_topic: "/cmd_vel"
+    person_selection_topic: "select_person"
+    tracking_markers_topic: "tracked_people_markers"
+    
+    # Velocity constraints (m/s and rad/s)
+    max_linear_velocity: 0.5
+    max_angular_velocity: 1.0
+    
+    # Control parameters
+    stopping_distance: 0.5          # Distance to maintain from target (meters)
+    kp_linear: 1.0                  # Proportional gain for linear velocity control
+    kd_angular: 0.5                 # Derivative/proportional gain for angular velocity control
+    
+    # Tracking parameters
+    max_tracking_distance: 1.5      # Max distance to associate new detection to existing track (meters)
+    track_timeout_frames: 15        # Number of frames to keep track alive without detection (extended for occlusion)
+    confidence_threshold: 0.3       # Minimum confidence to consider a track valid
+    prefer_high_confidence: true    # In crowded scenes, only follow high-confidence tracks
+    publish_tracking_markers: true  # Publish visualization markers for tracked people (shows confidence)

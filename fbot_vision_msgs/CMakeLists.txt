@@ -10,6 +10,10 @@ find_package(sensor_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/KeyPoint2D.msg"
   "msg/KeyPoint3D.msg"
@@ -21,6 +25,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceDetection3DArray.msg"
   "msg/VLMQuestion.msg"
   "msg/VLMAnswer.msg"
+  "msg/PersonDetection.msg"
+	"msg/PersonDetectionList.msg"
   "srv/PeopleIntroducing.srv"
   "srv/LookAtDescription3D.srv"
   "srv/VLMQuestionAnswering.srv"
@@ -33,5 +39,4 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 ament_export_dependencies(rosidl_default_runtime)
 ament_export_dependencies(std_msgs geometry_msgs sensor_msgs vision_msgs nav_msgs)
 
-# Mark this package as an ament package
 ament_package()
