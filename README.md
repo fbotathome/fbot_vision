@@ -80,7 +80,7 @@ fbot_vision/
 ### Object Detection
 ```bash
 # Launch YOLOv8 object detection
-ros2 launch fbot_recognition yolov8_object_recognition.launch.py use_realsense:=True
+ros2 launch fbot_recognition yolov8_object_recognition.launch.py use_camera:=True
 
 # Start/stop detection service
 ros2 service call /fbot_vision/fr/object_start std_srvs/srv/Empty
@@ -90,7 +90,7 @@ ros2 service call /fbot_vision/fr/object_stop std_srvs/srv/Empty
 ### Person Tracking
 ```bash
 # Launch YOLO tracker with pose estimation
-ros2 launch fbot_recognition yolo_tracker_recognition.launch.py use_realsense:=True
+ros2 launch fbot_recognition yolo_tracker_recognition.launch.py use_camera:=True
  
 # Start/stop tracking
 ros2 service call /fbot_vision/pt/start std_srvs/srv/Empty
@@ -116,7 +116,7 @@ ros2 service call /fbot_vision/face_recognition/people_forgetting \
 ### Moondream Object Recognition
 ```bash
 # Launch Moondream object recognition (local)
-ros2 launch fbot_recognition moondream_object_recognition.launch.py use_remote:=false use_realsense:=True
+ros2 launch fbot_recognition moondream_object_recognition.launch.py use_remote:=false use_camera:=True
 
 # Set the object prompt (class to detect)
 ros2 topic pub /fbot_vision/fr/object_prompt std_msgs/String "data: 'cup'"
