@@ -40,8 +40,8 @@ def generate_launch_description():
         description="If should run the node on remote"
     )
 
-    launch_realsense_arg = DeclareLaunchArgument(
-        'use_realsense',
+    launch_camera_arg = DeclareLaunchArgument(
+        'use_camera',
         default_value='false',
         description="If should launch the camera node"
     )
@@ -68,21 +68,22 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-    realsense2_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
-        ),
-        launch_arguments={
-            'camera_name': 'camera',
-            'camera_namespace': 'fbot_vision',
-            'enable_rgbd': 'true',
-            'enable_sync': 'true',
-            'align_depth.enable': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'true'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_realsense')))
+    camera_node = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(get_package_share_directory('orbbec_camera'), 'launch', 'femto_bolt.launch.py')
+            ),
+            launch_arguments={
+                'camera_name': 'camera',
+                # 'camera_namespace': 'fbot_vision',
+                # 'enable_rgbd': 'true',
+                'enable_frame_sync': 'true',
+                # 'align_depth.enable': 'true',
+                'enable_color': 'true',
+                'enable_depth': 'true',
+                'enable_point_cloud': 'true'
+            }.items(),
+            condition=IfCondition(LaunchConfiguration('use_camera'))
+        )
 
     return LaunchDescription([
         config_file_arg,
@@ -90,6 +91,6 @@ def generate_launch_description():
         config_remote_arg,
         yolo_tracker_remote_node,
         yolo_tracker_node,
-        launch_realsense_arg,
-        realsense2_node
+        launch_camera_arg,
+        camera_node
     ])

@@ -1,23 +1,19 @@
 face_recognition:
   ros__parameters:
-
     threshold: 0.5
     knn_threshold: 0.5
-    redis_host: 192.168.4.100
+    redis_host: 127.0.0.1
     redis_port: 6379
 
     subscribers:
-      
       qos_profile: 1
       slop: 0.2
 
-      image_rgb: /fbot_vision/camera/color/image_raw
-      camera_info: /fbot_vision/camera/color/camera_info
-      image_depth: /fbot_vision/camera/aligned_depth_to_color/image_raw
-
+      image_rgb: /camera/color/image_raw
+      camera_info: /camera/color/camera_info
+      image_depth: /camera/depth/image_raw
 
     publishers:
-
       face_recognition:
         topic: /fbot_vision/fr/face_recognition
         qos_profile: 1
@@ -26,7 +22,6 @@ face_recognition:
         qos_profile: 1
 
     servers:
-
       introduce_person:
         service: /fbot_vision/fr/introduce_person
       forget_person:
