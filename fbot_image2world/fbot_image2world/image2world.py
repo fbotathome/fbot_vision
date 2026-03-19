@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+from typing import List
+import numpy as np
+import rclpy
+import rclpy.logging
+from rclpy.node import Node
+from cv_bridge import CvBridge
+import message_filters
+from std_msgs.msg import Header
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2
+from fbot_vision_msgs.msg import Detection2DArray, Detection2D, Detection3DArray, Detection3D, VisionBridge, VisionBridgeArray
+from visualization_msgs.msg import Marker, MarkerArray
+import open3d as o3d
+import math
+from rclpy.duration import Duration
+import cv2
+
+import ros2_numpy
+
+np.random.seed(72)
+
+def quaternion_from_matrix(matrix):
+    q = np.empty((4, ), dtype=np.float64)
+    M = np.array(matrix, dtype=np.float64, copy=False)[:4, :4]
+    t = np.trace(M)
+    if t > M[3, 3]:
+        q[3] = t
+        q[2] = M[1, 0] - M[0, 1]
+        q[1] = M[0, 2] - M[2, 0]
+        q[0] = M[2, 1] - M[1, 2]
+    else:
+        i, j, k = 0, 1, 2
+        if M[1, 1] > M[0, 0]:
+            i, j, k = 1, 2, 0
+        if M[2, 2] > M[i, i]:
+            i, j, k = 2, 0, 1
+        t = M[i, i] - (M[j, j] + M[k, k]) + M[3, 3]
+        q[i] = t
+        q[j] = M[i, j] + M[j, i]
+        q[k] = M[k, i] + M[i, k]
+        q[3] = M[k, j] - M[j, k]
+    q *= 0.5 / math.sqrt(t * M[3, 3])
+    return q
+
+def generateRandomColor():
+    red = np.random.randint(0, 256)
+    green = np.random.randint(0, 256)
+    blue = np.random.randint(0, 256)
+    return np.asarray((red, green, blue), dtype=np.uint8)
+
+class Image2World(Node):
+
+    def __init__(self):
+        super().__init__('image_2_world')
+
+        self.callbacks = {
+            Detection2D.DETECTION : self.detection2D_to_detection3D,
+            Detection2D.POSE : self.detectionPose2D_to_detectionPose3D,
+            Detection2D.INSTANCE_SEGMENTATION : self.detectionSeg2D_to_detectionSeg3D
+        }
+
+        # Declare parameters
+        self.declare_parameter('camera_name', 'multisense_1')
+        self.camera_name = self.get_parameter('camera_name').value
+
+        self.cv_bridge = CvBridge()
+        self.current_camera_info = None
+        self.lut_table = None
+        self.default_depth = 0.5
+        self.label_to_color = {}
+
+        # Publishers
+        self._dbg_pub = self.create_publisher(Detection3DArray, f"{self.camera_name}/detection3d", 1)
+        self.pcd_publisher = self.create_publisher(PointCloud2, f"{self.camera_name}/img_pcd", 1) 
+
+        # Subscribers
+        depth_sub = message_filters.Subscriber(
+            self, Image, f"/{self.camera_name}/left/openni_depth", qos_profile=1)
+        
+        camera_info_sub = message_filters.Subscriber(
+            self, CameraInfo, f"/{self.camera_name}/aux/image_rect_color/camera_info", qos_profile=1)
+        
+        detections_sub = message_filters.Subscriber(
+            self, Detection2DArray, f"{self.camera_name}/detections", qos_profile=1)
+
+        self._synchronizer = message_filters.ApproximateTimeSynchronizer(
+            (depth_sub, detections_sub, camera_info_sub), 1, 0.5)
+
+        self._synchronizer.registerCallback(self.callback)
+
+
+    def __compareCameraInfo(self, camera_info: CameraInfo):
+        equal = True
+        equal = equal and (camera_info.width == self.current_camera_info.width)
+        equal = equal and (camera_info.height == self.current_camera_info.height)
+        equal = equal and np.all(np.isclose(np.asarray(camera_info.k),
+                                            np.asarray(self.current_camera_info.k)))
+        return equal
+        
+    def __mountLutTable(self, camera_info: CameraInfo):
+        if self.lut_table is None or not self.__compareCameraInfo(camera_info):
+            self.current_camera_info = camera_info
+            K = np.asarray(camera_info.k).reshape((3,3))
+
+            fx = 1./K[0,0]
+            fy = 1./K[1,1]
+            cx = K[0,2]
+            cy = K[1,2]
+
+            x_table = (np.arange(0, self.current_camera_info.width) - cx)*fx 
+            y_table = (np.arange(0, self.current_camera_info.height) - cy)*fy
+
+            x_mg, y_mg = np.meshgrid(x_table, y_table)
+
+            self.lut_table = np.concatenate((x_mg[:, :, np.newaxis], y_mg[:, :, np.newaxis]), axis=2)
+
+    def pointCloudArraystoOpen3D(self, xyz: np.ndarray):
+        if len(xyz.shape) == 3:
+            xyz = xyz.reshape(-1, 3)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz)
+        pcd.remove_non_finite_points()
+        return pcd
+    
+    def Open3dToPointCloud2(self, pcd: o3d.geometry.PointCloud, header: Header):
+        xyz = np.asarray(pcd.points)
+        data: PointCloud2 = self.arrays2toPointCloud2(xyz, header)
+        return data
+    
+    def detectionSeg2D_to_visionBridge(self, detection2d: Detection2D, pcd: np.ndarray, header: Header) -> VisionBridge:  
+        # Convert the mask to a boolean array
+        mask = self.cv_bridge.imgmsg_to_cv2(detection2d.mask, "passthrough") > 0
+
+        # Get the 3D points corresponding to the mask
+        #print(mask.shape, pcd.shape)
+        points3d = pcd[mask]
+        o3d_pcd = self.pointCloudArraystoOpen3D(points3d)
+
+        o3d_pcd = o3d_pcd.voxel_down_sample(voxel_size=0.02)
+        o3d_pcd, _ = o3d_pcd.remove_radius_outlier(nb_points=20,
+                                                   radius=0.1)
+
+        bbox = o3d.geometry.AxisAlignedBoundingBox.create_from_points(o3d_pcd.points)
+
+        bbox_center = bbox.get_center()
+        box_rotation = np.eye(4,4)
+        #box_rotation[:3, :3] = box_r
+        box_orientation = quaternion_from_matrix(box_rotation)
+        bbox_size = bbox.get_max_bound() - bbox.get_min_bound()
+        bbox_size = np.dot(bbox_size, box_rotation[:3, :3])
+
+
+        # Create the 3D detection
+        visionBridge = VisionBridge()
+        visionBridge.label = detection2d.label
+        visionBridge.class_id = detection2d.class_id
+        visionBridge.score = detection2d.score
+        visionBridge.bbox.center.position.x = float(bbox_center[0])
+        visionBridge.bbox.center.position.y = float(bbox_center[1])
+        visionBridge.bbox.center.position.z = float(bbox_center[2])
+        visionBridge.bbox.size.x = bbox_size[0]
+        visionBridge.bbox.size.y = bbox_size[1]
+        visionBridge.bbox.size.z = bbox_size[2]
+        visionBridge.bbox.center.orientation.x = box_orientation[0]
+        visionBridge.bbox.center.orientation.y = box_orientation[1]
+        visionBridge.bbox.center.orientation.z = box_orientation[2]
+        visionBridge.bbox.center.orientation.w = box_orientation[3]
+
+        return visionBridge
+
+
+    def detectionSeg2D_to_detectionSeg3D(self, detection2d: Detection2D, pcd: np.ndarray, header: Header) -> Detection3D: 
+        # Convert the mask to a boolean array
+        mask = self.cv_bridge.imgmsg_to_cv2(detection2d.mask, "passthrough") > 0
+
+        # Resize the mask to match the height of the pcd
+        mask_resized = cv2.resize(mask.astype(np.uint8), (pcd.shape[1], pcd.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+        # points3d = pcd[mask]
+        points3d = pcd[mask_resized]
+
+        o3d_pcd = self.pointCloudArraystoOpen3D(points3d)
+        o3d_pcd = o3d_pcd.voxel_down_sample(voxel_size=0.02)
+        o3d_pcd, _ = o3d_pcd.remove_radius_outlier(nb_points=20,
+                                                   radius=0.1)
+        bbox = o3d.geometry.AxisAlignedBoundingBox.create_from_points(o3d_pcd.points)
+
+        bbox_center = bbox.get_center()
+        box_rotation = np.eye(4,4)
+        #box_rotation[:3, :3] = box_r
+        box_orientation = quaternion_from_matrix(box_rotation)
+        bbox_size = bbox.get_max_bound() - bbox.get_min_bound()
+        bbox_size = np.dot(bbox_size, box_rotation[:3, :3])
+
+        # Create the 3D detection
+        detection3d = Detection3D()
+        detection3d.label = detection2d.label
+        detection3d.class_id = detection2d.class_id
+        detection3d.score = detection2d.score
+        detection3d.bbox.center.position.x = float(bbox_center[0])
+        detection3d.bbox.center.position.y = float(bbox_center[1])
+        detection3d.bbox.center.position.z = float(bbox_center[2])
+        detection3d.bbox.size.x = bbox_size[0]
+        detection3d.bbox.size.y = bbox_size[1]
+        detection3d.bbox.size.z = bbox_size[2]
+        detection3d.bbox.center.orientation.x = box_orientation[0]
+        detection3d.bbox.center.orientation.y = box_orientation[1]
+        detection3d.bbox.center.orientation.z = box_orientation[2]
+        detection3d.bbox.center.orientation.w = box_orientation[3]
+        detection3d.mask_pcd = self.arrays2toPointCloud2(points3d, header)
+        return detection3d
+    
+    def detectionPose2D_to_detectionPose3D(self, detection2d: Detection2D, pdc: np.ndarray, header : Header) -> Detection3D:
+        raise NotImplementedError("Method not implemented")
+    
+    def detection2D_to_detection3D(self, detection2: Detection2D, pcd: np.ndarray, header : Header) -> Detection3D:
+        raise NotImplementedError("Method not implemented")
+
+    def pointCloud2toArrays(self, data: PointCloud2):
+        pc = ros2_numpy.numpify(data)
+        if len(pc.shape) == 2:
+            xyz = np.zeros((pc.shape[0], pc.shape[1], 3), dtype=np.float32)
+            xyz[:, :, 0] = pc['x']
+            xyz[:, :, 1] = pc['y']
+            xyz[:, :, 2] = pc['z']
+        elif len(pc.shape) == 1:
+            xyz = np.zeros((pc.shape[0], 3), dtype=np.float32)
+            xyz[:, 0] = pc['x']
+            xyz[:, 1] = pc['y']
+            xyz[:, 2] = pc['z']
+  
+        return xyz
+
+    def arrays2toPointCloud2(self, xyz: np.ndarray, header, rgb=None):
+        dtype = {'names':('x', 'y', 'z'), 'formats':('f4', 'f4', 'f4')}
+        if rgb is not None:
+            dtype = {'names':('x', 'y', 'z', 'rgb'), 'formats':('f4', 'f4', 'f4', 'f4')}
+        
+        if len(xyz.shape) == 3:
+            pc = np.zeros((xyz.shape[0], xyz.shape[1]), dtype=dtype)
+            pc['x'] = xyz[:, :, 0]
+            pc['y'] = xyz[:, :, 1]
+            pc['z'] = xyz[:, :, 2]
+            if rgb is not None:
+                pc['rgb'] = (rgb[:, :, 0].astype(np.uint32) << 16 | rgb[:, :, 1].astype(np.uint32) << 8 | rgb[:, :, 2].astype(np.uint32)).view(np.float32)
+        elif len(xyz.shape) == 2:
+            pc = np.zeros((xyz.shape[0]), dtype=dtype)
+            pc['x'] = xyz[:, 0]
+            pc['y'] = xyz[:, 1]
+            pc['z'] = xyz[:, 2]
+            if rgb is not None:
+                pc['rgb'] = (rgb[:, 0].astype(np.uint32) << 16 | rgb[:, 1].astype(np.uint32) << 8 | rgb[:, 2].astype(np.uint32)).view(np.float32)
+        else:
+            return None
+        
+        data = ros2_numpy.msgify(PointCloud2, pc, stamp=header.stamp, frame_id=header.frame_id)
+        
+        return data
+
+    def detectionSeg3DArray_to_PointCloud2(self, detections3d: Detection3DArray) -> PointCloud2:
+        final_pcd = PointCloud2()
+        header = detections3d.header
+
+        xyzs = []
+        rgbs = []
+        detection: Detection3D
+        
+        for detection in detections3d.detections:
+            label = detection.label
+            if label not in self.label_to_color:
+                self.label_to_color[label] = generateRandomColor()
+
+            xyz = self.pointCloud2toArrays(detection.mask_pcd)
+            rgb = np.ones(xyz.shape, dtype=np.uint8)*self.label_to_color[label]
+
+            xyzs.append(xyz)
+            rgbs.append(rgb)
+        if len(xyzs) > 0:  
+            final_pcd = self.arrays2toPointCloud2(np.concatenate(xyzs, axis=0), header, rgb=np.concatenate(rgbs, axis=0))
+
+        return final_pcd
+    
+    def detectionSeg3DArray_to_MarkerArrayBbox(self, detections3d: Detection3DArray) -> MarkerArray:
+        markers = MarkerArray()
+        det: Detection3D
+        for i, det in enumerate(detections3d.detections):
+            name = det.label
+            if name not in self.label_to_color:
+                self.label_to_color[name] = generateRandomColor()
+            color = self.label_to_color[name]/255.
+
+            # cube marker
+            marker = Marker()
+            marker.header = detections3d.header
+            marker.action = Marker.ADD
+            marker.pose = det.bbox.center
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 0.4
+            marker.ns = "bboxes"
+            marker.id = i
+            marker.type = Marker.CUBE
+            marker.scale = det.bbox.size
+            marker.lifetime = Duration(seconds=0.1).to_msg()
+            markers.markers.append(marker)
+
+            # text marker
+            marker = Marker()
+            marker.header = detections3d.header
+            marker.action = Marker.ADD
+            marker.pose = det.bbox.center
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 1.0
+            marker.id = i
+            marker.ns = "texts"
+            marker.type = Marker.TEXT_VIEW_FACING
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            marker.lifetime = Duration(seconds=0.1).to_msg()
+            marker.text = '{} ({:.2f})'.format(name, det.score)
+            markers.markers.append(marker)
+        
+        return markers
+
+    def crop_pcd_to_marker(self, original_pcd, marker_pose, marker_scale):
+        """
+        Corta a nuvem de pontos original para manter apenas os pontos dentro dos limites do marcador.
+        
+        :param original_pcd: Nuvem de pontos original (PointCloud) do Open3D.
+        :param marker_pose: Pose do marcador, contendo sua posição.
+        :param marker_scale: Escala do marcador, definindo o tamanho do espaço do marcador.
+        :return: Nuvem de pontos cortada.
+        """
+        # Converter pose e escala do marcador em limites de corte
+        min_bound = marker_pose - marker_scale / 2
+        max_bound = marker_pose + marker_scale / 2
+        
+        # Cortar a nuvem de pontos
+        cropped_pcd = original_pcd.crop(
+            o3d.geometry.AxisAlignedBoundingBox(min_bound=min_bound, max_bound=max_bound)
+        )
+        
+        return cropped_pcd
+
+    def fit_model_to_marker(self, pcd, marker_bounds) -> np.ndarray:
+        cropped_pcds = []
+        for marker in marker_bounds.markers:
+            # Extrair pontos dentro dos limites do marcador
+            marker_pose = np.array([marker.pose.position.x, marker.pose.position.y, marker.pose.position.z])
+            marker_scale = np.array([marker.scale.x, marker.scale.y, marker.scale.z])
+            
+            # Cortar a nuvem de pontos com base nos limites do marcador
+            cropped_pcd = self.crop_pcd_to_marker(pcd, marker_pose, marker_scale)
+            cropped_pcds.append(cropped_pcd)
+
+        combined_pcd = o3d.geometry.PointCloud()
+
+        for temp_pcd in cropped_pcds:
+            combined_pcd += temp_pcd  # Concatena o PCD atual ao PCD combinado
+
+        return combined_pcd
+
+    def callback(self, depth_msg: Image, detections2d_msg: Detection2DArray, camera_info_msg: CameraInfo):
+        try:
+            self.get_logger().info("Image 2 world: callback")
+            detection3d_msg = Detection3DArray()
+            detection3d_msg.header = detections2d_msg.header
+
+            self.__mountLutTable(camera_info_msg)
+
+            depth_img = self.cv_bridge.imgmsg_to_cv2(depth_msg)
+            depth_img = cv2.resize(depth_img, (camera_info_msg.width, camera_info_msg.height))
+
+            pcd = np.zeros((depth_img.shape[0]*depth_img.shape[1], 3), dtype=float)
+
+            depth_arr = depth_img.flatten()/1000
+            pcd[:, 0] = self.lut_table[:, :, 0].flatten()*depth_arr # x
+            pcd[:, 1] = self.lut_table[:, :, 1].flatten()*depth_arr # y
+            pcd[:, 2] = depth_arr # z
+            pcd = pcd.reshape((depth_img.shape[0], depth_img.shape[1], 3))
+            detections3d_array: List[Detection3D] = []
+            for detection2d in detections2d_msg.detections:
+                valid = False
+                for det_type in self.callbacks.keys():
+                    if detection2d.type & det_type:
+                        detections3d_array.append(self.detectionSeg2D_to_detectionSeg3D(detection2d, pcd, detections2d_msg.header))
+                        break
+            
+            detection3d_msg.detections = detections3d_array
+            debug_pcd_msg = self.detectionSeg3DArray_to_PointCloud2(detection3d_msg)
+            # Publish the PointCloud2 message
+            self.pcd_publisher.publish(debug_pcd_msg)
+            self._dbg_pub.publish(detection3d_msg)
+            return
+        except Exception as e:
+            print("Algum erro ocorreu", e)
+            return
+            
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    image2world = Image2World()
+
+    rclpy.spin(image2world)
+
+    image2world.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

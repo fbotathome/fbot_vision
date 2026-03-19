@@ -1,5 +1,4 @@
 std_msgs/Header header
-std_msgs/Header poses_header
 
 int64 id #local id on image (can come from detection or instance segmentation) (optional)
 int64 global_id #global id to identify a description (optional)
