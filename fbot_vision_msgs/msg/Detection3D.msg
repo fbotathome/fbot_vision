@@ -7,7 +7,6 @@ int64 class_num
 float64 score #score of the description given by the algorithm
 
 vision_msgs/BoundingBox3D bbox3d #3D bounding box of the description
-vision_msgs/BoundingBox2D bbox2d #2D bounding box of the description
 std_msgs/ColorRGBA mean_color #mean color of the Description3D
 
 fbot_vision_msgs/KeyPoint3D[] pose #keypoints array

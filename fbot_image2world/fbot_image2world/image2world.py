@@ -8,7 +8,7 @@ from cv_bridge import CvBridge
 import message_filters
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2
-from fbot_vision_msgs.msg import Detection2DArray, Detection2D, Detection3DArray, Detection3D, VisionBridge, VisionBridgeArray
+from fbot_vision_msgs.msg import Detection2DArray, Detection2D, Detection3DArray, Detection3D, KeyPoint3D, KeyPoint2D
 from visualization_msgs.msg import Marker, MarkerArray
 import open3d as o3d
 import math
@@ -126,48 +126,6 @@ class Image2World(Node):
         xyz = np.asarray(pcd.points)
         data: PointCloud2 = self.arrays2toPointCloud2(xyz, header)
         return data
-    
-    def detectionSeg2D_to_visionBridge(self, detection2d: Detection2D, pcd: np.ndarray, header: Header) -> VisionBridge:  
-        # Convert the mask to a boolean array
-        mask = self.cv_bridge.imgmsg_to_cv2(detection2d.mask, "passthrough") > 0
-
-        # Get the 3D points corresponding to the mask
-        #print(mask.shape, pcd.shape)
-        points3d = pcd[mask]
-        o3d_pcd = self.pointCloudArraystoOpen3D(points3d)
-
-        o3d_pcd = o3d_pcd.voxel_down_sample(voxel_size=0.02)
-        o3d_pcd, _ = o3d_pcd.remove_radius_outlier(nb_points=20,
-                                                   radius=0.1)
-
-        bbox = o3d.geometry.AxisAlignedBoundingBox.create_from_points(o3d_pcd.points)
-
-        bbox_center = bbox.get_center()
-        box_rotation = np.eye(4,4)
-        #box_rotation[:3, :3] = box_r
-        box_orientation = quaternion_from_matrix(box_rotation)
-        bbox_size = bbox.get_max_bound() - bbox.get_min_bound()
-        bbox_size = np.dot(bbox_size, box_rotation[:3, :3])
-
-
-        # Create the 3D detection
-        visionBridge = VisionBridge()
-        visionBridge.label = detection2d.label
-        visionBridge.class_id = detection2d.class_id
-        visionBridge.score = detection2d.score
-        visionBridge.bbox.center.position.x = float(bbox_center[0])
-        visionBridge.bbox.center.position.y = float(bbox_center[1])
-        visionBridge.bbox.center.position.z = float(bbox_center[2])
-        visionBridge.bbox.size.x = bbox_size[0]
-        visionBridge.bbox.size.y = bbox_size[1]
-        visionBridge.bbox.size.z = bbox_size[2]
-        visionBridge.bbox.center.orientation.x = box_orientation[0]
-        visionBridge.bbox.center.orientation.y = box_orientation[1]
-        visionBridge.bbox.center.orientation.z = box_orientation[2]
-        visionBridge.bbox.center.orientation.w = box_orientation[3]
-
-        return visionBridge
-
 
     def detectionSeg2D_to_detectionSeg3D(self, detection2d: Detection2D, pcd: np.ndarray, header: Header) -> Detection3D: 
         # Convert the mask to a boolean array
@@ -194,26 +152,61 @@ class Image2World(Node):
         # Create the 3D detection
         detection3d = Detection3D()
         detection3d.label = detection2d.label
-        detection3d.class_id = detection2d.class_id
+        detection3d.class_num = detection2d.class_num
         detection3d.score = detection2d.score
-        detection3d.bbox.center.position.x = float(bbox_center[0])
-        detection3d.bbox.center.position.y = float(bbox_center[1])
-        detection3d.bbox.center.position.z = float(bbox_center[2])
-        detection3d.bbox.size.x = bbox_size[0]
-        detection3d.bbox.size.y = bbox_size[1]
-        detection3d.bbox.size.z = bbox_size[2]
-        detection3d.bbox.center.orientation.x = box_orientation[0]
-        detection3d.bbox.center.orientation.y = box_orientation[1]
-        detection3d.bbox.center.orientation.z = box_orientation[2]
-        detection3d.bbox.center.orientation.w = box_orientation[3]
-        detection3d.mask_pcd = self.arrays2toPointCloud2(points3d, header)
+        detection3d.bbox3d.center.position.x = float(bbox_center[0])
+        detection3d.bbox3d.center.position.y = float(bbox_center[1])
+        detection3d.bbox3d.center.position.z = float(bbox_center[2])
+        detection3d.bbox3d.size.x = bbox_size[0]
+        detection3d.bbox3d.size.y = bbox_size[1]
+        detection3d.bbox3d.size.z = bbox_size[2]
+        detection3d.bbox3d.center.orientation.x = box_orientation[0]
+        detection3d.bbox3d.center.orientation.y = box_orientation[1]
+        detection3d.bbox3d.center.orientation.z = box_orientation[2]
+        detection3d.bbox3d.center.orientation.w = box_orientation[3]
+
         return detection3d
     
-    def detectionPose2D_to_detectionPose3D(self, detection2d: Detection2D, pdc: np.ndarray, header : Header) -> Detection3D:
+    def detectionPose2D_to_detectionPose3D(self, detection2d: Detection2D, pcd: np.ndarray, header : Header) -> Detection3D:
+        detection3d = self.detection2D_to_detection3D(detection2d, pcd, header)
+        kp : KeyPoint2D
+        for kp in detection2d.pose:
+            kp3d = KeyPoint3D()
+            kp3d.id = kp.id
+            kp3d.score = kp.score
+            x3D, y3D, z3D = pcd[kp.y, kp.x]
+            kp3d.x = x3D
+            kp3d.y = y3D
+            kp3d.z = z3D
+            detection3d.pose.append(kp3d)
+
         raise NotImplementedError("Method not implemented")
     
-    def detection2D_to_detection3D(self, detection2: Detection2D, pcd: np.ndarray, header : Header) -> Detection3D:
-        raise NotImplementedError("Method not implemented")
+    def detection2D_to_detection3D(self, detection2d: Detection2D, pcd: np.ndarray, header : Header) -> Detection3D:
+        
+        x2D, y2D = detection2d.bbox.center.position.x, detection2d.bbox.center.position.y
+        center_points = pcd[y2D-1:y2D+2,x2D-1:x2D+2].reshape(-1,3)
+        x3D,y3D,z3D = np.median(center_points,axis=0)
+
+        box_rotation = np.eye(4,4)
+        box_orientation = quaternion_from_matrix(box_rotation)
+
+
+        detection3d = Detection3D()
+        detection3d.label = detection2d.label
+        detection3d.class_num = detection2d.class_num    
+        detection3d.bbox3d.center.position.x = x3D
+        detection3d.bbox3d.center.position.y = y3D
+        detection3d.bbox3d.center.position.z = z3D
+        detection3d.bbox3d.size.x = -1
+        detection3d.bbox3d.size.y = -1
+        detection3d.bbox3d.size.z = -1
+        detection3d.bbox3d.center.orientation.x = box_orientation[0]
+        detection3d.bbox3d.center.orientation.y = box_orientation[1]
+        detection3d.bbox3d.center.orientation.z = box_orientation[2]
+        detection3d.bbox3d.center.orientation.w = box_orientation[3]
+
+        return detection3d
 
     def pointCloud2toArrays(self, data: PointCloud2):
         pc = ros2_numpy.numpify(data)
@@ -383,10 +376,9 @@ class Image2World(Node):
             pcd = pcd.reshape((depth_img.shape[0], depth_img.shape[1], 3))
             detections3d_array: List[Detection3D] = []
             for detection2d in detections2d_msg.detections:
-                valid = False
                 for det_type in self.callbacks.keys():
-                    if detection2d.type & det_type:
-                        detections3d_array.append(self.detectionSeg2D_to_detectionSeg3D(detection2d, pcd, detections2d_msg.header))
+                    if (detection2d.type & det_type) != 0:
+                        detections3d_array.append(self.callbacks[det_type](detection2d, pcd, detections2d_msg.header))
                         break
             
             detection3d_msg.detections = detections3d_array
