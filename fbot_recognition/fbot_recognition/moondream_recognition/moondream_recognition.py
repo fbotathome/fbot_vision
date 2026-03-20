@@ -134,7 +134,7 @@ class MoondreamRecognition(BaseRecognition):
                 y_min = int(box['y_min'] * pilImage.height)
                 y_max = int(box['y_max'] * pilImage.height)
 
-                imageArray = cv2.rectangle(imageArray, (x_min, y_min), (x_max, y_max), (255, 0, 255))
+                imageArray = cv2.rectangle(imageArray, (x_min, y_min), (x_max, y_max), (255, 0, 255), 6)
         image = IMG.fromarray(imageArray[..., ::-1])
         debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
         self.debugPublisher.publish(debugImageMsg)
