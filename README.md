@@ -167,6 +167,7 @@ ros2 service call /fbot_vision/vlm/answer_history/query \
 | Topic | Type | Description |
 |-------|------|-------------|
 | `/fbot_vision/fr/object_recognition` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D object detections |
+| `/fbot_vision/fr/object_debug` | [`sensor_msgs/Image`](http://docs.ros.org/en/api/sensor_msgs/html/msg/Image.html) | Debug image with detection overlays |
 | `/fbot_vision/pt/tracking3D` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D person tracking |
 | `/fbot_vision/fr/face_recognition` | [`Detection3DArray`](fbot_vision_msgs/msg/Detection3DArray.msg) | 3D face recognition |
 | `/fbot_vision/vlm/question_answering/query` | [`VLMQuestion`](fbot_vision_msgs/msg/VLMQuestion.msg) | VLM questions |
