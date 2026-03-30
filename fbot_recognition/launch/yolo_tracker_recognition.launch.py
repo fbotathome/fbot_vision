@@ -43,9 +43,14 @@ def generate_launch_description():
     launch_realsense_arg = DeclareLaunchArgument(
         'use_realsense',
         default_value='false',
-        description="If should launch the camera node"
+        description="If should launch the realsense node"
     )
 
+    launch_femtobolt_arg = DeclareLaunchArgument(
+        'use_femtobolt',
+        default_value='false',
+        description="If should launch the femtobolt node"
+    )
 
     yolo_tracker_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
@@ -84,6 +89,25 @@ def generate_launch_description():
         }.items(),
         condition=IfCondition(LaunchConfiguration('use_realsense')))
 
+    femtobolt2_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('orbbec_camera'), 'launch', 'femto_bolt.launch.py')
+        ),
+        launch_arguments={
+            'camera_namespace': 'fbot_vision',
+            'camera_name': 'camera',
+            'enable_color': 'true',
+            'enable_depth': 'true',
+            'enable_ir': 'true',
+            'depth_registration': 'true',
+            'align_mode': 'SW',
+            'enable_frame_sync': 'true',
+            'enable_point_cloud': 'true',
+            'enable_colored_point_cloud': 'true',
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('use_femtobolt'))
+    )
+
     return LaunchDescription([
         config_file_arg,
         config_file_remote_arg,
@@ -91,5 +115,6 @@ def generate_launch_description():
         yolo_tracker_remote_node,
         yolo_tracker_node,
         launch_realsense_arg,
-        realsense2_node
+        realsense2_node,
+        femtobolt2_node
     ])

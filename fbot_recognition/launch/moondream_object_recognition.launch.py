@@ -50,6 +50,14 @@ def generate_launch_description():
             description="If it should run the realsense node"
         ))
 
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_femtobolt',
+            default_value='false',
+            description="If it should run the femtobolt node"
+        ))
+
+
     moondream_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='moondream_recognition',
@@ -89,9 +97,29 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('use_realsense'))
     )
 
+    femtobolt2_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('orbbec_camera'), 'launch', 'femto_bolt.launch.py')
+        ),
+        launch_arguments={
+            'camera_namespace': 'fbot_vision',
+            'camera_name': 'camera',
+            'enable_color': 'true',
+            'enable_depth': 'true',
+            'enable_ir': 'true',
+            'depth_registration': 'true',
+            'align_mode': 'SW',
+            'enable_frame_sync': 'true',
+            'enable_point_cloud': 'true',
+            'enable_colored_point_cloud': 'true',
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('use_femtobolt'))
+    )
+
     return LaunchDescription([
         *declared_arguments,
         moondream_object_remote_node,
         moondream_object_node,
-        realsense2_node
+        realsense2_node,
+        femtobolt2_node
     ])
