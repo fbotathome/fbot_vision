@@ -186,9 +186,39 @@ class FaceRecognition(BaseRecognition):
                 uuid = f'{unknown_idx}'
                 unknown_idx += 1
    
-            cv2.rectangle(debug_image, (left, top), (right, bottom), (255, 0, 0), 2)
-            font = cv2.FONT_HERSHEY_DUPLEX
-            cv2.putText(debug_image, name, (left + 4, bottom + 10), font, 0.5, (180,180,180), 2)
+            color = (255, 0, 255)
+            thickness = 6
+
+            # bbox
+            debug_image = cv2.rectangle(debug_image, (left, top), (right, bottom), color, thickness)
+
+            # 🔥 label igual moondream
+            label = "person"
+
+            text_x = left + 5
+            text_y = top + 40
+
+            font_scale = 2.0
+            text_thickness = 4
+
+            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
+
+            # fundo do texto
+            cv2.rectangle(debug_image,
+                        (text_x - 5, text_y - h - 5),
+                        (text_x + w + 5, text_y + 5),
+                        color,
+                        -1)
+
+            # texto
+            cv2.putText(debug_image,
+                        label,
+                        (text_x, text_y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        font_scale,
+                        (255, 255, 255),
+                        text_thickness,
+                        cv2.LINE_AA)
 
             faceDetection3D = self.createFaceDetection3D(bbox2d, bbox3d, imageMsg.header, name, uuid, face_detection['embedding'])
             face_recognitions.detections.append(faceDetection3D)
