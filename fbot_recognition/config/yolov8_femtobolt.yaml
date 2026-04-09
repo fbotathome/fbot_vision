@@ -1,10 +1,8 @@
-
 yolov8_recognition_femtobolt:
   ros__parameters:
-
     threshold: 0.6
     start_on_init: True
-      
+
     max_sizes:
       - [0.05, 0.05, 0.05]
 
@@ -22,9 +20,8 @@ yolov8_recognition_femtobolt:
       image_rgb: /femtobolt/color/image_raw
       camera_info: /femtobolt/color/camera_info
       image_depth: /femtobolt/depth/image_raw
-      
-    publishers:
 
+    publishers:
       object_recognition:
         topic: /fr/object_recognition
         qos_profile: 10
