@@ -80,46 +80,19 @@ def generate_launch_description():
     )
 
 
-    realsense2_node = IncludeLaunchDescription(
+    camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+            os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
         ),
         launch_arguments={
-            'camera_name': 'camera',
-            'camera_namespace': 'fbot_vision',
-            'enable_rgbd': 'true',
-            'enable_sync': 'true',
-            'align_depth.enable': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'true'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_realsense'))
-    )
-
-    femtobolt2_node = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('orbbec_camera'), 'launch', 'femto_bolt.launch.py')
-        ),
-        launch_arguments={
-            'camera_namespace': 'fbot_vision',
-            'camera_name': 'camera',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'enable_ir': 'true',
-            'depth_registration': 'true',
-            'align_mode': 'SW',
-            'enable_frame_sync': 'true',
-            'enable_point_cloud': 'true',
-            'enable_colored_point_cloud': 'true',
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_femtobolt'))
+            'use_realsense': 'false',
+            'use_femtobolt': 'true'
+        }.items()
     )
 
     return LaunchDescription([
         *declared_arguments,
         moondream_object_remote_node,
         moondream_object_node,
-        realsense2_node,
-        femtobolt2_node
+        camera
     ])
