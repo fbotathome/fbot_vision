@@ -10,8 +10,8 @@ yolov8_recognition_femtobolt:
 
     services:
       object_recognition:
-        start: /fr/object_start
-        stop: /fr/object_stop
+        start: /femtobolt/object_start
+        stop: /femtobolt/object_stop
 
     subscribers:
       slop: 0.2
@@ -23,9 +23,9 @@ yolov8_recognition_femtobolt:
 
     publishers:
       object_recognition:
-        topic: /fr/object_recognition
+        topic: /femtobolt/object_recognition
         qos_profile: 10
 
       debug:
-        topic: /fr/object_debug
+        topic: /femtobolt/object_debug
         qos_profile: 10

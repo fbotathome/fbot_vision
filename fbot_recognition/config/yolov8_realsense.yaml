@@ -10,8 +10,8 @@ yolov8_recognition_realsense:
 
     services:
       object_recognition:
-        start: /fbot_vision/yolo/object_start
-        stop: /fbot_vision/yolo/object_stop
+        start: /fbot_vision/realsense/object_start
+        stop: /fbot_vision/realsense/object_stop
 
     subscribers:
       slop: 0.2
@@ -23,9 +23,9 @@ yolov8_recognition_realsense:
 
     publishers:
       object_recognition:
-        topic: /fbot_vision/yolo/object_recognition
+        topic: /fbot_vision/realsense/object_recognition
         qos_profile: 10
 
       debug:
-        topic: /fbot_vision/yolo/object_debug
+        topic: /fbot_vision/realsense/object_debug
         qos_profile: 10
