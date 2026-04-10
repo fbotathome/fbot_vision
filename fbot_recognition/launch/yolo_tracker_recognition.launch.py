@@ -40,18 +40,6 @@ def generate_launch_description():
         description="If should run the node on remote"
     )
 
-    launch_realsense_arg = DeclareLaunchArgument(
-        'use_realsense',
-        default_value='false',
-        description="If should launch the realsense node"
-    )
-
-    launch_femtobolt_arg = DeclareLaunchArgument(
-        'use_femtobolt',
-        default_value='false',
-        description="If should launch the femtobolt node"
-    )
-
     yolo_tracker_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
@@ -88,6 +76,5 @@ def generate_launch_description():
         config_remote_arg,
         yolo_tracker_remote_node,
         yolo_tracker_node,
-        launch_realsense_arg,
         camera
     ])

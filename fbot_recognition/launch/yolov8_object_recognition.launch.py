@@ -43,18 +43,6 @@ def generate_launch_description():
             default_value='true',
             description="If it should run the node on remote"
         ))
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'use_realsense',
-            default_value='false',
-            description="If it should run the realsense node"
-        ))
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'use_femtobolt',
-            default_value='false',
-            description="If it should run the femtobolt node"
-        ))
 
     yolo_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
