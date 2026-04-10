@@ -44,6 +44,20 @@ def generate_launch_description():
             description="If it should run the node on remote"
         ))
 
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_realsense',
+            default_value='false',
+            description="If it should run the realsense node"
+        ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_femtobolt',
+            default_value='false',
+            description='If should launch the femtobolt'
+        )
+    )
+    
     moondream_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='moondream_recognition',
@@ -65,14 +79,13 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-
     camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
         ),
         launch_arguments={
-            'use_realsense': 'false',
-            'use_femtobolt': 'false'
+            'use_realsense': LaunchConfiguration('use_realsense'),
+            'use_femtobolt': LaunchConfiguration('use_femtobolt'),
         }.items()
     )
 
