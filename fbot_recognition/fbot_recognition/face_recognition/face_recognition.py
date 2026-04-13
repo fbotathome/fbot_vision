@@ -189,10 +189,8 @@ class FaceRecognition(BaseRecognition):
             color = (255, 0, 255)
             thickness = 6
 
-            # bbox
             debug_image = cv2.rectangle(debug_image, (left, top), (right, bottom), color, thickness)
 
-            # 🔥 label igual moondream
             label = "person"
 
             text_x = left + 5
@@ -203,14 +201,12 @@ class FaceRecognition(BaseRecognition):
 
             (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
 
-            # fundo do texto
             cv2.rectangle(debug_image,
                         (text_x - 5, text_y - h - 5),
                         (text_x + w + 5, text_y + 5),
                         color,
                         -1)
 
-            # texto
             cv2.putText(debug_image,
                         label,
                         (text_x, text_y),
