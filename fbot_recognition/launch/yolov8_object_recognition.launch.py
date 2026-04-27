@@ -89,5 +89,4 @@ def generate_launch_description():
         *declared_arguments,
         yolo_object_remote_node,
         yolo_object_node,
-        camera
     ])
