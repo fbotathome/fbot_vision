@@ -10,7 +10,7 @@ moondream_recognition:
       image_rgb: /femtobolt/color/image_raw
       camera_info: /femtobolt/color/camera_info
       image_depth: /femtobolt/depth/image_raw
-      object_prompt: /fr/object_prompt
+      object_prompt: fbot_vision/fr/object_prompt
 
     publishers:
       object_recognition:
