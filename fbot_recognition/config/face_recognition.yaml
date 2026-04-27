@@ -26,5 +26,3 @@ face_recognition:
         service: /fbot_vision/fr/introduce_person
       forget_person:
         service: /fbot_vision/fr/forget_person
-
-#192.168.4.100
