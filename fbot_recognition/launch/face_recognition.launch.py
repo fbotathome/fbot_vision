@@ -46,7 +46,7 @@ def generate_launch_description():
         ))
     declared_arguments.append(
         DeclareLaunchArgument(
-            'use_femtobolt',
+            'use_realsense',
             default_value='false',
             description="If it should run the realsense node"
         ))
@@ -62,7 +62,8 @@ def generate_launch_description():
         source_paths=[
             "/home/jetson/jetson_ws/install/setup.bash"
         ],
-        condition=IfCondition(LaunchConfiguration('use_remote')))
+        condition=IfCondition(LaunchConfiguration('use_remote'))
+    )
 
     face_recognition_node = Node(
         package='fbot_recognition',
@@ -72,18 +73,27 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-
-    femtobolt2_node = IncludeLaunchDescription(
+    realsense2_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('orbbec_camera'), 'launch', 'femto_bolt.launch.py')
+            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
         ),
-        launch_arguments={},
-        condition=IfCondition(LaunchConfiguration('use_femtobolt'))
+        launch_arguments={
+            'camera_name': 'camera',
+            'camera_namespace': 'fbot_vision',
+            'enable_rgbd': 'true',
+            'enable_sync': 'true',
+            'align_depth.enable': 'true',
+            'enable_color': 'true',
+            'enable_depth': 'true',
+            'pointcloud.enable': 'true'
+        }.items(),
+        condition=IfCondition(LaunchConfiguration('use_realsense'))
     )
+
 
     return LaunchDescription([
         *declared_arguments,
         face_recognition_remote_node,
         face_recognition_node,
-        femtobolt2_node
+        realsense2_node
     ])
