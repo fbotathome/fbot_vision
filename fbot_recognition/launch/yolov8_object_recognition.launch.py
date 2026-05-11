@@ -3,7 +3,7 @@ from launch import LaunchDescription
 from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
@@ -12,31 +12,8 @@ from launch_ros.substitutions import FindPackageShare
 import os
 
 def generate_launch_description():
-    config_file_path_remote = PathJoinSubstitution([
-        FindPackageShareRemote(remote_install_space='/home/jetson/jetson_ws/install', package='fbot_recognition'),
-        'config',
-        'yolov8_object_recognition.yaml']
-    )
-
-    config_file_path = PathJoinSubstitution([
-        get_package_share_directory('fbot_recognition'),
-        'config',
-        'yolov8_object_recognition.yaml']
-    )
-
     declared_arguments = []
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'config_object_recognition',
-            default_value=config_file_path,
-            description='Path to the parameter file'
-        ))
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'remote_config_object_recognition',
-            default_value=config_file_path_remote,
-            description='Path to the remote parameter file'
-        ))
+
     declared_arguments.append(
         DeclareLaunchArgument(
             'use_remote',
@@ -49,12 +26,37 @@ def generate_launch_description():
             default_value='false',
             description="If it should run the realsense node"
         ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_femtobolt',
+            default_value='false',
+            description='If should launch the femtobolt'
+        )
+    )
+
+    config_file_name = PythonExpression([
+        "'yolov8_realsense.yaml' if '", LaunchConfiguration('use_realsense'), "' == 'true' else 'yolov8_femtobolt.yaml'"
+    ])
+
+    config_file_path = PathJoinSubstitution([
+        FindPackageShare('fbot_recognition'),
+        'config',
+        config_file_name
+    ])
+
+    config_file_path_remote = PathJoinSubstitution([
+        FindPackageShareRemote(remote_install_space='/home/jetson/jetson_ws/install', package='fbot_recognition'),
+        'config',
+        config_file_name
+    ])
 
     yolo_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='yolov8_recognition',
-        name='yolov8_recognition',
-        parameters=[LaunchConfiguration('remote_config_object_recognition'),],
+        name=PythonExpression([
+            "'yolov8_recognition_realsense' if '", LaunchConfiguration('use_realsense'), "' == 'true' else 'yolov8_recognition_femtobolt'"
+        ]),
+        parameters=[config_file_path_remote],
         user='jetson',
         machine="jetson",
         source_paths=[
@@ -62,36 +64,29 @@ def generate_launch_description():
         ],
         condition=IfCondition(LaunchConfiguration('use_remote'))
     )
-
+    
     yolo_object_node = Node(
         package='fbot_recognition',
         executable='yolov8_recognition',
-        name='yolov8_recognition',
-        parameters=[LaunchConfiguration('config_object_recognition'),],
+        name=PythonExpression([
+            "'yolov8_recognition_realsense' if '", LaunchConfiguration('use_realsense'), "' == 'true' else 'yolov8_recognition_femtobolt'"
+        ]),
+        parameters=[config_file_path],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-
-    realsense2_node = IncludeLaunchDescription(
+    camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+            os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
         ),
         launch_arguments={
-            'camera_name': 'camera',
-            'camera_namespace': 'fbot_vision',
-            'enable_rgbd': 'true',
-            'enable_sync': 'true',
-            'align_depth.enable': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'true'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_realsense'))
+            'use_realsense': LaunchConfiguration('use_realsense'),
+            'use_femtobolt': LaunchConfiguration('use_femtobolt'),
+        }.items()
     )
 
     return LaunchDescription([
         *declared_arguments,
         yolo_object_remote_node,
         yolo_object_node,
-        realsense2_node
     ])
