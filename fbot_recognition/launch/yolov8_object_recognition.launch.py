@@ -49,6 +49,13 @@ def generate_launch_description():
             default_value='false',
             description="If it should run the realsense node"
         ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_femtobolt',
+            default_value='false',
+            description='If should launch the femtobolt'
+        )
+    )
 
     yolo_object_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
@@ -72,26 +79,19 @@ def generate_launch_description():
     )
 
 
-    realsense2_node = IncludeLaunchDescription(
+    camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+            os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
         ),
         launch_arguments={
-            'camera_name': 'camera',
-            'camera_namespace': 'fbot_vision',
-            'enable_rgbd': 'true',
-            'enable_sync': 'true',
-            'align_depth.enable': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'true'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_realsense'))
+            'use_realsense': LaunchConfiguration('use_realsense'),
+            'use_femtobolt': LaunchConfiguration('use_femtobolt'),
+        }.items()
     )
 
     return LaunchDescription([
         *declared_arguments,
         yolo_object_remote_node,
         yolo_object_node,
-        realsense2_node
+        camera
     ])
