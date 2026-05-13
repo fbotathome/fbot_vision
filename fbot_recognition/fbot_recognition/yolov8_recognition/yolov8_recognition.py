@@ -7,16 +7,15 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 from PIL import Image as IMG
-from image2world import BoundingBoxProcessingData, boundingBoxProcessing
 
 from std_msgs.msg import Header
 from std_srvs.srv import Empty
 from builtin_interfaces.msg import Duration
 from sensor_msgs.msg import Image, CameraInfo
 from visualization_msgs.msg import Marker, MarkerArray
-from vision_msgs.msg import BoundingBox2D, BoundingBox3D
+from vision_msgs.msg import BoundingBox2D
 from fbot_recognition import BaseRecognition
-from fbot_vision_msgs.msg import Detection3D, Detection3DArray
+from fbot_vision_msgs.msg import Detection2D, Detection2DArray
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -38,7 +37,7 @@ class YoloV8Recognition(BaseRecognition):
     def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
         self.markerPublisher = self.create_publisher(MarkerArray, 'fbot_vision/fr/object_markers', qos_profile=self.debugQosProfile)
-        self.objectRecognitionPublisher = self.create_publisher(Detection3DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
+        self.objectRecognitionPublisher = self.create_publisher(Detection2DArray, self.objectRecognitionTopic, qos_profile=self.objectRecognitionQosProfile)
         self.recognitionStartService = self.create_service(Empty, self.startRecognitionTopic, self.startRecognition)
         self.recognitionStopService = self.create_service(Empty, self.stopRecognitionTopic, self.stopRecognition)
         super().initRosComm(callbackObject=self)
@@ -72,7 +71,7 @@ class YoloV8Recognition(BaseRecognition):
         self._stopRecognition()
         return resp
 
-    def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
+    def callback(self, cameraInfoMsg: CameraInfo, imageMsg: Image, depthMsg: Image) -> None:
 
         if not self.run:
             return
@@ -86,55 +85,41 @@ class YoloV8Recognition(BaseRecognition):
             return
         
         cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg,desired_encoding='bgr8')
-        results = self.model(cvImage)
+        results = self.model(cvImage, verbose=False)
 
         detectionHeader = imageMsg.header
 
-        detection3DArray = Detection3DArray()
-        detection3DArray.header = detectionHeader
-        detection3DArray.image_rgb = imageMsg
+        detection2DArray = Detection2DArray()
+        detection2DArray.header = detectionHeader
+        detection2DArray.image_rgb = imageMsg
+        detection2DArray.image_depth = depthMsg
+        detection2DArray.camera_info = cameraInfoMsg
+
+
 
         if len(results[0].boxes):
-            for box in results[0].boxes: 
+            for i ,box in enumerate(results[0].boxes): 
 
                 if box is None:
                     return None
+                
+                mask = None
+                if results[0].masks is not None:
+                    mask = results[0].masks[i].data[0].cpu().numpy()
                 
                 classId = int(box.cls)
                 
                 label = results[0].names[classId]
                 score = float(box.conf)
 
-                bb2d = BoundingBox2D()
-                data = BoundingBoxProcessingData()
-                data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+                box_coords = box.xyxy[0].cpu().numpy()
 
-                centerX, centerY, sizeX, sizeY = map(float, box.xywh[0])
-
-                data.boundingBox2D.center.position.x = centerX
-                data.boundingBox2D.center.position.y = centerY
-                data.boundingBox2D.size_x = sizeX
-                data.boundingBox2D.size_y = sizeY
-                data.maxSize.x = self.maxSizes[0]
-                data.maxSize.y = self.maxSizes[1]
-                data.maxSize.z = self.maxSizes[2]
-
-                bb2d = data.boundingBox2D
-        
-                try:
-                    bb3d = boundingBoxProcessing(data)
-                except Exception as e:
-                    self.get_logger().error(f"Error processing bounding box: {e}")
-                    continue
-
-                if np.linalg.norm([bb3d.center.position.x,bb3d.center.position.y,bb3d.center.position.z]) < 0.05:
-                    continue   
+                box_msg = self.createDetection2d(box_coords, score, detectionHeader, label, i, -1, mask)
+                detection2DArray.detections.append(box_msg)
                 
-                detection3d = self.createDetection3d(bb2d, bb3d, score, detectionHeader, label)
-                if detection3d is not None:
-                    detection3DArray.detections.append(detection3d)
+                
                     
-        self.objectRecognitionPublisher.publish(detection3DArray)
+        self.objectRecognitionPublisher.publish(detection2DArray)
         self.labels_dict.clear()
 
         imageArray = results[0].plot()
@@ -142,29 +127,31 @@ class YoloV8Recognition(BaseRecognition):
         debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
         self.debugPublisher.publish(debugImageMsg)
 
-        self.publishMarkers(detection3DArray.detections)
+    def createDetection2d(self, coord : np.ndarray, score: float, detectionHeader: Header, label: str, id : int, global_id: int, segmentation_mask : np.ndarray  = None) -> Detection2D:
+        '''
+        @brief Creates the detection2D messagem from the raw data.
+        @param coord: Numpy array containing the coordinates of the bounding box on the format x1, y1, x2, y2.
+        '''
+        if coord.shape != (4,):
+            raise ValueError(f"Expected coord shape of (4,), got {coord.shape}")
 
-    def createDetection3d(self, bb2d: BoundingBox2D, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str) -> Detection3D:
-        detection3d = Detection3D()
-        detection3d.header = detectionHeader
-        detection3d.score = score
+        msg = Detection2D()
+        # msg.type |= Detection2D.DETECTION
+        msg.header = detectionHeader
+        msg.score = score
+        msg.label = label
+        msg.id = id
 
-        if '-' in label:
-            detection3d.label = label
-        else:
-            detection3d.label = f"none-{label}" if label[0].islower() else f"None-{label}"
+        msg.bbox.center.position.x = (coord[0]+coord[2])/2
+        msg.bbox.center.position.y = (coord[1]+coord[3])/2
+        msg.bbox.size_x = float(coord[2]-coord[0])
+        msg.bbox.size_y = float(coord[3]-coord[1])
 
-        if detection3d.label in self.labels_dict:
-            self.labels_dict[detection3d.label] += 1
-        else:
-            self.labels_dict[detection3d.label] = 1
-            
-        detection3d.id = self.labels_dict[detection3d.label]
+        if segmentation_mask is not None:
+            msg.mask = self.cvBridge.cv2_to_imgmsg(segmentation_mask, encoding="mono8")
+            msg.type |= Detection2D.INSTANCE_SEGMENTATION        
 
-        detection3d.bbox2d = copy.deepcopy(bb2d)
-        detection3d.bbox3d = bb3d
-
-        return detection3d
+        return msg
 
 
     def publishMarkers(self, descriptions3d) -> None:
@@ -218,7 +205,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("model_file", "robocup2025.pt")
+        self.declare_parameter("model_file", "yolo11x-seg.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         self.declare_parameter("start_on_init", True)
         self.declare_parameter("services.object_recognition.start", "/fbot_vision/fr/object_start")

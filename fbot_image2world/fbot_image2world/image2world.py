@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import math
+import open3d as o3d
 from typing import List
 import numpy as np
 import rclpy
@@ -10,8 +12,6 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2
 from fbot_vision_msgs.msg import Detection2DArray, Detection2D, Detection3DArray, Detection3D, KeyPoint3D, KeyPoint2D
 from visualization_msgs.msg import Marker, MarkerArray
-import open3d as o3d
-import math
 from rclpy.duration import Duration
 import cv2
 
@@ -59,9 +59,8 @@ class Image2World(Node):
             Detection2D.INSTANCE_SEGMENTATION : self.detectionSeg2D_to_detectionSeg3D
         }
 
-        # Declare parameters
-        self.declare_parameter('camera_name', 'multisense_1')
-        self.camera_name = self.get_parameter('camera_name').value
+        # Declare parameter
+        # self.camera_name = self.get_parameter('camera_name').value
 
         self.cv_bridge = CvBridge()
         self.current_camera_info = None
@@ -70,23 +69,14 @@ class Image2World(Node):
         self.label_to_color = {}
 
         # Publishers
-        self._dbg_pub = self.create_publisher(Detection3DArray, f"{self.camera_name}/detection3d", 1)
-        self.pcd_publisher = self.create_publisher(PointCloud2, f"{self.camera_name}/img_pcd", 1) 
+        self._dbg_pub = self.create_publisher(Detection3DArray, f"/fbot_vision/i2w/detection3d", 1)
+        self.pcd_publisher = self.create_publisher(PointCloud2, f"/fbot_vision/i2w/img_pcd", 1) 
 
         # Subscribers
-        depth_sub = message_filters.Subscriber(
-            self, Image, f"/{self.camera_name}/left/openni_depth", qos_profile=1)
-        
-        camera_info_sub = message_filters.Subscriber(
-            self, CameraInfo, f"/{self.camera_name}/aux/image_rect_color/camera_info", qos_profile=1)
-        
-        detections_sub = message_filters.Subscriber(
-            self, Detection2DArray, f"{self.camera_name}/detections", qos_profile=1)
+        self.detection2d_sub = self.create_subscription(Detection2DArray, "/fbot_vision/fr/object_recognition",self.callback,10)
 
-        self._synchronizer = message_filters.ApproximateTimeSynchronizer(
-            (depth_sub, detections_sub, camera_info_sub), 1, 0.5)
-
-        self._synchronizer.registerCallback(self.callback)
+        
+        self.get_logger().info(f"Node {self.get_name()} initiaded.")
 
 
     def __compareCameraInfo(self, camera_info: CameraInfo):
@@ -157,10 +147,10 @@ class Image2World(Node):
         detection3d.bbox3d.center.position.x = float(bbox_center[0])
         detection3d.bbox3d.center.position.y = float(bbox_center[1])
         detection3d.bbox3d.center.position.z = float(bbox_center[2])
-        detection3d.bbox3d.size.x = bbox_size[0]
+        detection3d.bbox3d.size.x = float(bbox_size[0])
         detection3d.bbox3d.size.y = bbox_size[1]
         detection3d.bbox3d.size.z = bbox_size[2]
-        detection3d.bbox3d.center.orientation.x = box_orientation[0]
+        detection3d.bbox3d.center.orientation.x = float(box_orientation[0])
         detection3d.bbox3d.center.orientation.y = box_orientation[1]
         detection3d.bbox3d.center.orientation.z = box_orientation[2]
         detection3d.bbox3d.center.orientation.w = box_orientation[3]
@@ -174,7 +164,7 @@ class Image2World(Node):
             kp3d = KeyPoint3D()
             kp3d.id = kp.id
             kp3d.score = kp.score
-            x3D, y3D, z3D = pcd[kp.y, kp.x]
+            x3D, y3D, z3D = pcd[int(kp.y), int(kp.x)]
             kp3d.x = x3D
             kp3d.y = y3D
             kp3d.z = z3D
@@ -184,13 +174,12 @@ class Image2World(Node):
     
     def detection2D_to_detection3D(self, detection2d: Detection2D, pcd: np.ndarray, header : Header) -> Detection3D:
         
-        x2D, y2D = detection2d.bbox.center.position.x, detection2d.bbox.center.position.y
+        x2D, y2D = int(detection2d.bbox.center.position.x), int(detection2d.bbox.center.position.y)
         center_points = pcd[y2D-1:y2D+2,x2D-1:x2D+2].reshape(-1,3)
         x3D,y3D,z3D = np.median(center_points,axis=0)
 
         box_rotation = np.eye(4,4)
         box_orientation = quaternion_from_matrix(box_rotation)
-
 
         detection3d = Detection3D()
         detection3d.label = detection2d.label
@@ -198,9 +187,9 @@ class Image2World(Node):
         detection3d.bbox3d.center.position.x = x3D
         detection3d.bbox3d.center.position.y = y3D
         detection3d.bbox3d.center.position.z = z3D
-        detection3d.bbox3d.size.x = -1
-        detection3d.bbox3d.size.y = -1
-        detection3d.bbox3d.size.z = -1
+        detection3d.bbox3d.size.x = -1.0
+        detection3d.bbox3d.size.y = -1.0
+        detection3d.bbox3d.size.z = -1.0
         detection3d.bbox3d.center.orientation.x = box_orientation[0]
         detection3d.bbox3d.center.orientation.y = box_orientation[1]
         detection3d.bbox3d.center.orientation.z = box_orientation[2]
@@ -272,51 +261,51 @@ class Image2World(Node):
 
         return final_pcd
     
-    def detectionSeg3DArray_to_MarkerArrayBbox(self, detections3d: Detection3DArray) -> MarkerArray:
-        markers = MarkerArray()
-        det: Detection3D
-        for i, det in enumerate(detections3d.detections):
-            name = det.label
-            if name not in self.label_to_color:
-                self.label_to_color[name] = generateRandomColor()
-            color = self.label_to_color[name]/255.
+    # def detectionSeg3DArray_to_MarkerArrayBbox(self, detections3d: Detection3DArray) -> MarkerArray:
+    #     markers = MarkerArray()
+    #     det: Detection3D
+    #     for i, det in enumerate(detections3d.detections):
+    #         name = det.label
+    #         if name not in self.label_to_color:
+    #             self.label_to_color[name] = generateRandomColor()
+    #         color = self.label_to_color[name]/255.
 
-            # cube marker
-            marker = Marker()
-            marker.header = detections3d.header
-            marker.action = Marker.ADD
-            marker.pose = det.bbox.center
-            marker.color.r = color[0]
-            marker.color.g = color[1]
-            marker.color.b = color[2]
-            marker.color.a = 0.4
-            marker.ns = "bboxes"
-            marker.id = i
-            marker.type = Marker.CUBE
-            marker.scale = det.bbox.size
-            marker.lifetime = Duration(seconds=0.1).to_msg()
-            markers.markers.append(marker)
+    #         # cube marker
+    #         marker = Marker()
+    #         marker.header = detections3d.header
+    #         marker.action = Marker.ADD
+    #         marker.pose = det.bbox.center
+    #         marker.color.r = color[0]
+    #         marker.color.g = color[1]
+    #         marker.color.b = color[2]
+    #         marker.color.a = 0.4
+    #         marker.ns = "bboxes"
+    #         marker.id = i
+    #         marker.type = Marker.CUBE
+    #         marker.scale = det.bbox.size
+    #         marker.lifetime = Duration(seconds=0.1).to_msg()
+    #         markers.markers.append(marker)
 
-            # text marker
-            marker = Marker()
-            marker.header = detections3d.header
-            marker.action = Marker.ADD
-            marker.pose = det.bbox.center
-            marker.color.r = color[0]
-            marker.color.g = color[1]
-            marker.color.b = color[2]
-            marker.color.a = 1.0
-            marker.id = i
-            marker.ns = "texts"
-            marker.type = Marker.TEXT_VIEW_FACING
-            marker.scale.x = 0.05
-            marker.scale.y = 0.05
-            marker.scale.z = 0.05
-            marker.lifetime = Duration(seconds=0.1).to_msg()
-            marker.text = '{} ({:.2f})'.format(name, det.score)
-            markers.markers.append(marker)
+    #         # text marker
+    #         marker = Marker()
+    #         marker.header = detections3d.header
+    #         marker.action = Marker.ADD
+    #         marker.pose = det.bbox.center
+    #         marker.color.r = color[0]
+    #         marker.color.g = color[1]
+    #         marker.color.b = color[2]
+    #         marker.color.a = 1.0
+    #         marker.id = i
+    #         marker.ns = "texts"
+    #         marker.type = Marker.TEXT_VIEW_FACING
+    #         marker.scale.x = 0.05
+    #         marker.scale.y = 0.05
+    #         marker.scale.z = 0.05
+    #         marker.lifetime = Duration(seconds=0.1).to_msg()
+    #         marker.text = '{} ({:.2f})'.format(name, det.score)
+    #         markers.markers.append(marker)
         
-        return markers
+    #     return markers
 
     def crop_pcd_to_marker(self, original_pcd, marker_pose, marker_scale):
         """
@@ -356,15 +345,17 @@ class Image2World(Node):
 
         return combined_pcd
 
-    def callback(self, depth_msg: Image, detections2d_msg: Detection2DArray, camera_info_msg: CameraInfo):
+    def callback(self, detections2d_msg: Detection2DArray):
         try:
             self.get_logger().info("Image 2 world: callback")
             detection3d_msg = Detection3DArray()
             detection3d_msg.header = detections2d_msg.header
+            camera_info_msg = detections2d_msg.camera_info
+
 
             self.__mountLutTable(camera_info_msg)
 
-            depth_img = self.cv_bridge.imgmsg_to_cv2(depth_msg)
+            depth_img = self.cv_bridge.imgmsg_to_cv2(detections2d_msg.image_depth)
             depth_img = cv2.resize(depth_img, (camera_info_msg.width, camera_info_msg.height))
 
             pcd = np.zeros((depth_img.shape[0]*depth_img.shape[1], 3), dtype=float)
@@ -377,18 +368,19 @@ class Image2World(Node):
             detections3d_array: List[Detection3D] = []
             for detection2d in detections2d_msg.detections:
                 for det_type in self.callbacks.keys():
-                    if (detection2d.type & det_type) != 0:
+                    if (detection2d.type & det_type):
                         detections3d_array.append(self.callbacks[det_type](detection2d, pcd, detections2d_msg.header))
                         break
             
             detection3d_msg.detections = detections3d_array
-            debug_pcd_msg = self.detectionSeg3DArray_to_PointCloud2(detection3d_msg)
-            # Publish the PointCloud2 message
-            self.pcd_publisher.publish(debug_pcd_msg)
+            # debug_pcd_msg = self.detectionSeg3DArray_to_PointCloud2(detection3d_msg)
+            # # Publish the PointCloud2 message
+            # self.pcd_publisher.publish(debug_pcd_msg)
             self._dbg_pub.publish(detection3d_msg)
             return
         except Exception as e:
             print("Algum erro ocorreu", e)
+            raise(e)
             return
             
 

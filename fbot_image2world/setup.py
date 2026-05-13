@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            "image2world = fbot_image2world.image2world:main"
         ],
     },
 )
