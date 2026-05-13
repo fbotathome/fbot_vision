@@ -1,4 +1,0 @@
-string[] questions_filter
----
-fbot_vision_msgs/VLMAnswer[] answers
-int32 total_history_length
