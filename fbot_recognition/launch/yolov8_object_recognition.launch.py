@@ -75,6 +75,7 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
+
     camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
@@ -89,4 +90,5 @@ def generate_launch_description():
         *declared_arguments,
         yolo_object_remote_node,
         yolo_object_node,
+        camera
     ])
