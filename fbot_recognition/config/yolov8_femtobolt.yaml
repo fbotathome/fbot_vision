@@ -1,7 +1,6 @@
-yolov8_recognition:
+yolov8_recognition_femtobolt:
   ros__parameters:
     threshold: 0.6
-
     start_on_init: True
 
     max_sizes:
@@ -11,8 +10,8 @@ yolov8_recognition:
 
     services:
       object_recognition:
-        start: /fbot_vision/fr/object_start
-        stop: /fbot_vision/fr/object_stop
+        start: /fbot_vision/femtobolt/object_start
+        stop: /fbot_vision/femtobolt/object_stop
 
     subscribers:
       slop: 0.2
@@ -24,9 +23,9 @@ yolov8_recognition:
 
     publishers:
       object_recognition:
-        topic: /fbot_vision/fr/object_recognition
+        topic: /fbot_vision/femtobolt/object_recognition
         qos_profile: 10
 
       debug:
-        topic: /fbot_vision/fr/object_debug
+        topic: /fbot_vision/femtobolt/object_debug
         qos_profile: 10

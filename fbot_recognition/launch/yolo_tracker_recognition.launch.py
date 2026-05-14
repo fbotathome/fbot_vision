@@ -40,13 +40,6 @@ def generate_launch_description():
         description="If should run the node on remote"
     )
 
-    launch_realsense_arg = DeclareLaunchArgument(
-        'use_realsense',
-        default_value='false',
-        description="If should launch the camera node"
-    )
-
-
     yolo_tracker_remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
@@ -68,28 +61,38 @@ def generate_launch_description():
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-    realsense2_node = IncludeLaunchDescription(
+    declared_arguments = []
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_realsense',
+            default_value='false',
+            description="If it should run the realsense node"
+        ))
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            'use_femtobolt',
+            default_value='false',
+            description='If should launch the femtobolt'
+        )
+    )
+    
+    camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('realsense2_camera'), 'launch', 'rs_launch.py')
+            os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
         ),
         launch_arguments={
-            'camera_name': 'camera',
-            'camera_namespace': 'fbot_vision',
-            'enable_rgbd': 'true',
-            'enable_sync': 'true',
-            'align_depth.enable': 'true',
-            'enable_color': 'true',
-            'enable_depth': 'true',
-            'pointcloud.enable': 'true'
-        }.items(),
-        condition=IfCondition(LaunchConfiguration('use_realsense')))
+            'use_realsense': LaunchConfiguration('use_realsense'),
+            'use_femtobolt': LaunchConfiguration('use_femtobolt'),
+            'validate_config': 'false'
+        }.items()
+    )
 
     return LaunchDescription([
         config_file_arg,
         config_file_remote_arg,
         config_remote_arg,
+        *declared_arguments,
         yolo_tracker_remote_node,
         yolo_tracker_node,
-        launch_realsense_arg,
-        realsense2_node
+        camera
     ])
