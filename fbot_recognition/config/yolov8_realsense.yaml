@@ -1,0 +1,31 @@
+yolov8_recognition_realsense:
+  ros__parameters:
+    threshold: 0.6
+    start_on_init: True
+
+    max_sizes:
+      - [0.05, 0.05, 0.05]
+
+    model_file: yolov8n.pt
+
+    services:
+      object_recognition:
+        start: /fbot_vision/realsense/object_start
+        stop: /fbot_vision/realsense/object_stop
+
+    subscribers:
+      slop: 0.2
+      qos_profile: 10
+
+      image_rgb: /realsense/color/image_raw
+      camera_info: /realsense/color/camera_info
+      image_depth: /realsense/aligned_depth_to_color/image_raw
+
+    publishers:
+      object_recognition:
+        topic: /fbot_vision/realsense/object_recognition
+        qos_profile: 10
+
+      debug:
+        topic: /fbot_vision/realsense/object_debug
+        qos_profile: 10

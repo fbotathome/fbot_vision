@@ -86,6 +86,7 @@ def generate_launch_description():
         launch_arguments={
             'use_realsense': LaunchConfiguration('use_realsense'),
             'use_femtobolt': LaunchConfiguration('use_femtobolt'),
+            'validate_config': 'false'
         }.items()
     )
 
