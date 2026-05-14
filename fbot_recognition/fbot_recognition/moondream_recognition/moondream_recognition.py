@@ -134,7 +134,22 @@ class MoondreamRecognition(BaseRecognition):
                 y_min = int(box['y_min'] * pilImage.height)
                 y_max = int(box['y_max'] * pilImage.height)
 
-                imageArray = cv2.rectangle(imageArray, (x_min, y_min), (x_max, y_max), (255, 0, 255))
+                imageArray = cv2.rectangle(imageArray, (x_min, y_min), (x_max, y_max), (255, 0, 255), 6)
+
+                label = self.current_class
+
+                text_x = x_min + 5
+                text_y = y_min + 40
+
+                font_scale = 2.0
+                thickness = 4
+
+                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+
+                cv2.rectangle(imageArray, (text_x - 5, text_y - h - 5), (text_x + w + 5, text_y + 5), (255, 0, 255), -1)
+                cv2.putText(imageArray, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+
         image = IMG.fromarray(imageArray[..., ::-1])
         debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
         self.debugPublisher.publish(debugImageMsg)
