@@ -15,6 +15,7 @@ string label #class detected by classification, detection, semantic segmentation
 int64 class_num
 float64 score #score of the description given by the algorithm
 
+geometry_msgs/Vector3 max_size #max 3d size of a object
 sensor_msgs/Image mask #segmentation mask (optional)
 vision_msgs/BoundingBox2D bbox #(optional)
 fbot_vision_msgs/KeyPoint2D[] pose

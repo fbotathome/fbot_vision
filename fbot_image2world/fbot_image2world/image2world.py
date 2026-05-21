@@ -54,9 +54,9 @@ class Image2World(Node):
         super().__init__('image_2_world')
 
         self.callbacks = {
+            Detection2D.INSTANCE_SEGMENTATION : self.detectionSeg2D_to_detectionSeg3D,
             Detection2D.DETECTION : self.detection2D_to_detection3D,
-            Detection2D.POSE : self.detectionPose2D_to_detectionPose3D,
-            Detection2D.INSTANCE_SEGMENTATION : self.detectionSeg2D_to_detectionSeg3D
+            Detection2D.POSE : self.detectionPose2D_to_detectionPose3D
         }
 
         # Declare parameter
@@ -70,7 +70,8 @@ class Image2World(Node):
 
         # Publishers
         self._dbg_pub = self.create_publisher(Detection3DArray, f"/fbot_vision/i2w/detection3d", 1)
-        self.pcd_publisher = self.create_publisher(PointCloud2, f"/fbot_vision/i2w/img_pcd", 1) 
+        self.pcd_publisher = self.create_publisher(PointCloud2, f"/fbot_vision/i2w/img_pcd", 1)
+        self.marker_publisher = self.create_publisher(MarkerArray, "/fbot_vision/i2w/marker", 1)
 
         # Subscribers
         self.detection2d_sub = self.create_subscription(Detection2DArray, "/fbot_vision/fr/object_recognition",self.callback,10)
@@ -139,6 +140,8 @@ class Image2World(Node):
         bbox_size = bbox.get_max_bound() - bbox.get_min_bound()
         bbox_size = np.dot(bbox_size, box_rotation[:3, :3])
 
+        self.get_logger().info(f"{bbox_size}")
+
         # Create the 3D detection
         detection3d = Detection3D()
         detection3d.label = detection2d.label
@@ -147,9 +150,9 @@ class Image2World(Node):
         detection3d.bbox3d.center.position.x = float(bbox_center[0])
         detection3d.bbox3d.center.position.y = float(bbox_center[1])
         detection3d.bbox3d.center.position.z = float(bbox_center[2])
-        detection3d.bbox3d.size.x = float(bbox_size[0])
+        detection3d.bbox3d.size.x = bbox_size[0]
         detection3d.bbox3d.size.y = bbox_size[1]
-        detection3d.bbox3d.size.z = bbox_size[2]
+        detection3d.bbox3d.size.z = detection2d.max_size.z
         detection3d.bbox3d.center.orientation.x = float(box_orientation[0])
         detection3d.bbox3d.center.orientation.y = box_orientation[1]
         detection3d.bbox3d.center.orientation.z = box_orientation[2]
@@ -344,6 +347,26 @@ class Image2World(Node):
             combined_pcd += temp_pcd  # Concatena o PCD atual ao PCD combinado
 
         return combined_pcd
+    
+    def createMarker(self,detection3d : Detection3D, header : Header, id) -> Marker:
+        marker = Marker()
+        marker.header = header
+        marker.id = id
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD
+        marker.pose.position.x = detection3d.bbox3d.center.position.x
+        marker.pose.position.y = detection3d.bbox3d.center.position.y
+        marker.pose.position.z = detection3d.bbox3d.center.position.z
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 0.5
+        marker.scale.x = detection3d.bbox3d.size.x
+        marker.scale.y = detection3d.bbox3d.size.y
+        marker.scale.z = detection3d.bbox3d.size.z
+        marker.lifetime = Duration(seconds=1.0).to_msg()
+
+        return marker
 
     def callback(self, detections2d_msg: Detection2DArray):
         try:
@@ -371,12 +394,17 @@ class Image2World(Node):
                     if (detection2d.type & det_type):
                         detections3d_array.append(self.callbacks[det_type](detection2d, pcd, detections2d_msg.header))
                         break
-            
             detection3d_msg.detections = detections3d_array
             # debug_pcd_msg = self.detectionSeg3DArray_to_PointCloud2(detection3d_msg)
             # # Publish the PointCloud2 message
             # self.pcd_publisher.publish(debug_pcd_msg)
+
+            marker_array = MarkerArray()
+            for i, detection3d in enumerate(detections3d_array):
+                marker_array.markers.append(self.createMarker(detection3d, detections2d_msg.header, id=i))
+
             self._dbg_pub.publish(detection3d_msg)
+            self.marker_publisher.publish(marker_array)
             return
         except Exception as e:
             print("Algum erro ocorreu", e)

@@ -146,6 +146,10 @@ class YoloV8Recognition(BaseRecognition):
         msg.bbox.center.position.y = (coord[1]+coord[3])/2
         msg.bbox.size_x = float(coord[2]-coord[0])
         msg.bbox.size_y = float(coord[3]-coord[1])
+        
+        msg.max_size.x = self.maxSizes[0]
+        msg.max_size.y = self.maxSizes[1]
+        msg.max_size.z = self.maxSizes[2]
 
         if segmentation_mask is not None:
             msg.mask = self.cvBridge.cv2_to_imgmsg(segmentation_mask, encoding="mono8")
