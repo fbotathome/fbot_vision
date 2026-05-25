@@ -191,15 +191,13 @@ class FaceRecognition(BaseRecognition):
 
             debug_image = cv2.rectangle(debug_image, (left, top), (right, bottom), color, thickness)
 
-            label = "person"
-
             text_x = left + 5
             text_y = top + 40
 
             font_scale = 2.0
             text_thickness = 4
 
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
+            (w, h), _ = cv2.getTextSize(name, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness)
 
             cv2.rectangle(debug_image,
                         (text_x - 5, text_y - h - 5),
@@ -208,7 +206,7 @@ class FaceRecognition(BaseRecognition):
                         -1)
 
             cv2.putText(debug_image,
-                        label,
+                        name,
                         (text_x, text_y),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         font_scale,
