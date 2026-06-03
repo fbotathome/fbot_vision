@@ -141,12 +141,21 @@ class MoondreamRecognition(BaseRecognition):
                 text_x = x_min + 5
                 text_y = y_min + 40
 
-                font_scale = 2.0
-                thickness = 4
+                box_w = max(1, x_max - x_min)
+                box_h = max(1, y_max - y_min)
+                font_scale = max(1.0, min(4.5, min(box_w, box_h) / 135.0))
+                thickness = max(1, int(round(font_scale * 2)))
 
-                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+                (w, h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
 
-                cv2.rectangle(imageArray, (text_x - 5, text_y - h - 5), (text_x + w + 5, text_y + 5), (255, 0, 255), -1)
+                pad_x = 6
+                pad_y = 4
+                text_x = x_min
+                text_y = max(y_min - pad_y, h + pad_y)
+                top_left = (text_x - pad_x, text_y - h - pad_y)
+                bottom_right = (text_x + w + pad_x, text_y + baseline + pad_y)
+
+                cv2.rectangle(imageArray, top_left, bottom_right, (255, 0, 255), -1)
                 cv2.putText(imageArray, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
 
@@ -164,7 +173,7 @@ class MoondreamRecognition(BaseRecognition):
         if '/' in label:
             detection3d.label = label
         else:
-            detection3d.label = f"none/{label}" if label[0].islower() else f"None/{label}"
+            detection3d.label = f"none-{label}" if label[0].islower() else f"None-{label}"
 
         if detection3d.label in self.labels_dict:
             self.labels_dict[detection3d.label] += 1
