@@ -1,8 +1,17 @@
+# =============================================================================
+# WARNING: The `subscribers:` and `publishers:` blocks below are NOT read by the
+# nodes. The nodes use generic topic names (image_raw, detections, depth_image,
+# etc.) that are wired up via REMAPPINGS in yolo_ros.launch.py. Editing the topic
+# names here has NO effect at runtime — change the corresponding launch arguments
+# (input_image_topic, detections_topic, ...) instead. These blocks are kept for
+# documentation only.
+# =============================================================================
+
 yolo_node:
   ros__parameters:
     model: yolov8m.pt
     device: cuda:0
-    fuse_model: false
+    fuse_model: true
     yolo_encoding: bgr8
     enable: true
     image_reliability: 1
@@ -10,12 +19,13 @@ yolo_node:
     iou: 0.7
     imgsz_height: 480
     imgsz_width: 640
-    half: false
+    half: true
     max_det: 300
     augment: false
     agnostic_nms: false
     retina_masks: false
 
+    # NOTE: ignored at runtime — topics come from launch remappings (see warning above).
     subscribers:
       image_raw: /femtobolt/color/image_raw
 
@@ -32,6 +42,7 @@ tracking_node:
     tracker: bytetrack.yaml
     image_reliability: 1
 
+    # NOTE: ignored at runtime — topics come from launch remappings (see warning above).
     subscribers:
       image_raw: /femtobolt/color/image_raw
       detections: /fbot_vision/fr/object_recognition2D
@@ -42,7 +53,7 @@ tracking_node:
 
 detect_3d_node:
   ros__parameters:
-    target_frame: base_link
+    target_frame: femtobolt_color_optical_frame
     depth_image_units_divisor: 1000
     depth_image_reliability: 1
     depth_info_reliability: 1
@@ -52,7 +63,12 @@ detect_3d_node:
     bimodal_min_gap: 0.08
     max_depth_extent_default: 0.60
     max_depth_extent_bottle: 0.15
+    max_depth_extent_cup: 0.12
+    max_depth_extent_can: 0.10
+    max_depth_extent_person: 0.55
+    max_depth_extent_chair: 0.60
 
+    # NOTE: ignored at runtime — topics come from launch remappings (see warning above).
     subscribers:
       depth_image: /femtobolt/depth/image_raw
       depth_info: /femtobolt/depth/camera_info
@@ -67,6 +83,7 @@ debug_node:
     image_reliability: 1
     use_3d: true
 
+    # NOTE: ignored at runtime — topics come from launch remappings (see warning above).
     subscribers:
       image_raw: /femtobolt/color/image_raw
       detections: /fbot_vision/fr/object_recognition
