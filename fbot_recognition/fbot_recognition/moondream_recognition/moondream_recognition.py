@@ -61,7 +61,7 @@ class MoondreamRecognition(BaseRecognition):
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
         if self.current_class == "":
-            if time.time() % 5 < 0.1:
+            if time.time() % 60 < 0.1:
                 self.get_logger().warn("Waiting for object prompt to be set ...")
             return
 
@@ -191,7 +191,7 @@ class MoondreamRecognition(BaseRecognition):
     def publishMarkers(self, descriptions3d) -> None:
         markers = MarkerArray()
         duration = Duration()
-        duration.sec = 2
+        duration.sec = 200
         color = np.asarray([255, 0, 0])/255.0
         for i, det in enumerate(descriptions3d):
             name = det.label

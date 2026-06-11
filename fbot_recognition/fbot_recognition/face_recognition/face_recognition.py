@@ -13,6 +13,9 @@ from image2world.image2worldlib import *
 
 from fbot_recognition import BaseRecognition
 
+from builtin_interfaces.msg import Duration
+from visualization_msgs.msg import Marker, MarkerArray
+
 import rclpy.logging
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
@@ -75,6 +78,7 @@ class FaceRecognition(BaseRecognition):
         self.introducePersonService = self.create_service(srv_type=PeopleIntroducing, srv_name=self.introducePersonServername, callback=self.peopleIntroducingCB, callback_group=service_cb_group)
         self.last_detection = None
         self.peopleForgettingService = self.create_service(srv_type=PeopleForgetting, srv_name=self.forgetPersonServername, callback=self.forgetPersonCB, callback_group=service_cb_group)
+        self.markerPublisher = self.create_publisher(MarkerArray, 'fbot_vision/fr/face_markers', qos_profile=self.debugQosProfile)
         super().initRosComm(callbackObject=self)
     
     def forgetPersonCB(self, req: PeopleForgetting.Request, res: PeopleForgetting.Response):
@@ -224,6 +228,53 @@ class FaceRecognition(BaseRecognition):
             face_recognitions.detections = self.orderByCloseness(face_recognitions.detections)
             self.faceRecognitionPublisher.publish(face_recognitions)
             self.last_detection = face_recognitions
+
+            self.publishMarkers(face_recognitions.detections)
+
+    def publishMarkers(self, descriptions3d) -> None:
+        markers = MarkerArray()
+        duration = Duration()
+        duration.sec = 2
+        color = np.asarray([255, 0, 0])/255.0
+        for i, det in enumerate(descriptions3d):
+            name = det.label
+
+            # cube marker
+            marker = Marker()
+            marker.header = det.header
+            marker.action = Marker.ADD
+            marker.pose = det.bbox3d.center
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 0.4
+            marker.ns = "bboxes"
+            marker.id = i
+            marker.type = Marker.SPHERE
+            marker.scale = det.bbox3d.size
+            marker.lifetime = duration
+            markers.markers.append(marker)
+
+            # text marker
+            marker = Marker()
+            marker.header = det.header
+            marker.action = Marker.ADD
+            marker.pose = det.bbox3d.center
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+            marker.color.a = 1.0
+            marker.id = i
+            marker.ns = "texts"
+            marker.type = Marker.TEXT_VIEW_FACING
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            marker.text = '{} ({:.2f})'.format(name, det.score)
+            marker.lifetime = duration
+            markers.markers.append(marker)
+        
+        self.markerPublisher.publish(markers)
 
     def orderByCloseness(self, detections):
         """!

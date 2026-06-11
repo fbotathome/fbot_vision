@@ -14,21 +14,21 @@ def generate_launch_description():
     detections_topic = LaunchConfiguration("detections_topic")
     detections_topic_cmd = DeclareLaunchArgument(
         "detections_topic",
-        default_value="/fbot_vision/fr/object_recognition2D",
+        default_value="/fbot_vision/femtobolt/object_recognition2D",
         description="Public topic for 2D detections",
     )
 
     detections_3d_topic = LaunchConfiguration("detections_3d_topic")
     detections_3d_topic_cmd = DeclareLaunchArgument(
         "detections_3d_topic",
-        default_value="/fbot_vision/fr/object_recognition",
+        default_value="/fbot_vision/femtobolt/object_recognition",
         description="Public topic for 3D detections",
     )
 
     debug_topic = LaunchConfiguration("debug_topic")
     debug_topic_cmd = DeclareLaunchArgument(
         "debug_topic",
-        default_value="/fbot_vision/fr/object_debug",
+        default_value="/fbot_vision/femtobolt/object_debug",
         description="Public topic for debug image output",
     )
 

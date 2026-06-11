@@ -45,7 +45,7 @@ class YoloV8Recognition(BaseRecognition):
 
     def loadModel(self) -> None: 
         self.get_logger().info("=> Loading model")
-        self.model = YOLO(self.modelFile)
+        self.model = YOLO(self.modelFile, verbose=False)
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
@@ -124,7 +124,7 @@ class YoloV8Recognition(BaseRecognition):
                 try:
                     bb3d = boundingBoxProcessing(data)
                 except Exception as e:
-                    self.get_logger().error(f"Error processing bounding box: {e}")
+                    # self.get_logger().error(f"Error processing bounding box: {e}")
                     continue
 
                 if np.linalg.norm([bb3d.center.position.x,bb3d.center.position.y,bb3d.center.position.z]) < 0.05:
