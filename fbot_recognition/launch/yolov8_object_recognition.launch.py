@@ -7,7 +7,6 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Pyth
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
-from launch_remote_ssh import NodeRemoteSSH, FindPackageShareRemote
 from launch_ros.substitutions import FindPackageShare
 import os
 
@@ -43,27 +42,6 @@ def generate_launch_description():
         'config',
         config_file_name
     ])
-
-    config_file_path_remote = PathJoinSubstitution([
-        FindPackageShareRemote(remote_install_space='/home/jetson/jetson_ws/install', package='fbot_recognition'),
-        'config',
-        config_file_name
-    ])
-
-    yolo_object_remote_node = NodeRemoteSSH(
-        package='fbot_recognition',
-        executable='yolov8_recognition',
-        name=PythonExpression([
-            "'yolov8_recognition_realsense' if '", LaunchConfiguration('use_realsense'), "' == 'true' else 'yolov8_recognition_femtobolt'"
-        ]),
-        parameters=[config_file_path_remote],
-        user='jetson',
-        machine="jetson",
-        source_paths=[
-            "/home/jetson/jetson_ws/install/setup.bash"
-        ],
-        condition=IfCondition(LaunchConfiguration('use_remote'))
-    )
     
     yolo_object_node = Node(
         package='fbot_recognition',
@@ -90,7 +68,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         *declared_arguments,
-        yolo_object_remote_node,
         yolo_object_node,
         camera
     ])
