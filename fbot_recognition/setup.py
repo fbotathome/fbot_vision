@@ -33,6 +33,7 @@ setup(
             'yolo_tracker_recognition = fbot_recognition.yolo_tracker_recognition.yolo_tracker_recognition:main',
             'face_recognition = fbot_recognition.face_recognition.face_recognition:main',
             'moondream_recognition = fbot_recognition.moondream_recognition.moondream_recognition:main',
+            'gemini_recognition = fbot_recognition.gemini_recognition.gemini_recognition:main',
         ],
     },
 )
