@@ -17,9 +17,9 @@ yolov8_recognition_femtobolt:
       slop: 0.2
       qos_profile: 10
 
-      image_rgb: /femtobolt/color/image_raw
-      camera_info: /femtobolt/color/camera_info
-      image_depth: /femtobolt/depth/image_raw
+      image_rgb: /fbot_vision/femtobolt/color/image_raw
+      camera_info: /fbot_vision/femtobolt/color/camera_info
+      image_depth: /fbot_vision/femtobolt/depth/image_raw
 
     publishers:
       object_recognition:

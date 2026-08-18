@@ -140,6 +140,7 @@ class YoloV8Recognition(BaseRecognition):
         imageArray = results[0].plot()
         image = IMG.fromarray(imageArray[..., ::-1])
         debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
+        debugImageMsg.header = detectionHeader
         self.debugPublisher.publish(debugImageMsg)
 
         self.publishMarkers(detection3DArray.detections)
@@ -218,7 +219,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("publishers.object_recognition.topic", "/fbot_vision/fr/object_recognition")
         self.declare_parameter("publishers.object_recognition.qos_profile", 1)
         self.declare_parameter("threshold", 0.5)
-        self.declare_parameter("model_file", "robocup2025.pt")
+        self.declare_parameter("model_file", "yolov8n.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         self.declare_parameter("start_on_init", True)
         self.declare_parameter("services.object_recognition.start", "/fbot_vision/fr/object_start")

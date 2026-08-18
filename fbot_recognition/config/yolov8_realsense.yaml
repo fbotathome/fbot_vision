@@ -17,9 +17,9 @@ yolov8_recognition_realsense:
       slop: 0.2
       qos_profile: 10
 
-      image_rgb: /realsense/color/image_raw
-      camera_info: /realsense/color/camera_info
-      image_depth: /realsense/aligned_depth_to_color/image_raw
+      image_rgb: /fbot_vision/realsense/color/image_raw
+      camera_info: /fbot_vision/realsense/color/camera_info
+      image_depth: /fbot_vision/realsense/aligned_depth_to_color/image_raw
 
     publishers:
       object_recognition:

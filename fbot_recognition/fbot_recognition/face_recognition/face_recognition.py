@@ -217,7 +217,9 @@ class FaceRecognition(BaseRecognition):
             faceDetection3D = self.createFaceDetection3D(bbox2d, bbox3d, imageMsg.header, name, uuid, face_detection['embedding'])
             face_recognitions.detections.append(faceDetection3D)
 
-        self.debugPublisher.publish(self.cvBridge.cv2_to_imgmsg(np.array(debug_image), encoding='rgb8'))
+        debug_img_msg = self.cvBridge.cv2_to_imgmsg(np.array(debug_image), encoding='rgb8')
+        debug_img_msg.header = detectionHeader
+        self.debugPublisher.publish(debug_img_msg)
 
         if len(face_recognitions.detections) > 0:
 

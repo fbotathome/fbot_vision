@@ -161,6 +161,7 @@ class MoondreamRecognition(BaseRecognition):
 
         image = IMG.fromarray(imageArray[..., ::-1])
         debugImageMsg = self.cvBridge.cv2_to_imgmsg(np.array(image), encoding='rgb8')
+        debugImageMsg.header = detectionHeader
         self.debugPublisher.publish(debugImageMsg)
 
         self.publishMarkers(detection3DArray.detections)
