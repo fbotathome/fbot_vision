@@ -3,6 +3,7 @@
 import copy
 
 import rclpy
+import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
@@ -94,20 +95,28 @@ class YoloV8Recognition(BaseRecognition):
         detection3DArray.header = detectionHeader
         detection3DArray.image_rgb = imageMsg
 
+        isSeg = self.useMask and getattr(results[0], "masks", None) is not None
+
         if len(results[0].boxes):
-            for box in results[0].boxes: 
+            for i, box in enumerate(results[0].boxes):
 
                 if box is None:
                     return None
-                
+
                 classId = int(box.cls)
-                
+
                 label = results[0].names[classId]
                 score = float(box.conf)
 
+                maskImg = None
+                if isSeg and i < len(results[0].masks.xy) and len(results[0].masks.xy[i]):
+                    maskImg = np.zeros((results[0].orig_img.shape[0], results[0].orig_img.shape[1]), np.uint8)
+                    polygon = np.array(results[0].masks.xy[i].tolist(), dtype=np.int32)
+                    cv2.fillPoly(maskImg, [polygon], 255)
+
                 bb2d = BoundingBox2D()
                 data = BoundingBoxProcessingData()
-                data.sensor.setSensorData(cameraInfoMsg, depthMsg)
+                data.sensor.setSensorData(cameraInfoMsg, depthMsg, maskImg)
 
                 centerX, centerY, sizeX, sizeY = map(float, box.xywh[0])
 
@@ -220,6 +229,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("threshold", 0.5)
         self.declare_parameter("model_file", "robocup2025.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
+        self.declare_parameter("use_mask", True)
         self.declare_parameter("start_on_init", True)
         self.declare_parameter("services.object_recognition.start", "/fbot_vision/fr/object_start")
         self.declare_parameter("services.object_recognition.stop", "/fbot_vision/fr/object_stop")
@@ -235,6 +245,7 @@ class YoloV8Recognition(BaseRecognition):
         self.start_on_init = self.get_parameter("start_on_init").value
         self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
         self.maxSizes = self.get_parameter("max_sizes").value
+        self.useMask = self.get_parameter("use_mask").value
         self.startRecognitionTopic = self.get_parameter("services.object_recognition.start").value
         self.stopRecognitionTopic = self.get_parameter("services.object_recognition.stop").value
         super().readParameters()

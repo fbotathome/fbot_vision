@@ -1,0 +1,5 @@
+geometry_msgs/PoseStamped pose           #fixed pose/place the robot should keep looking at (in any frame)
+float64 timeout                          #seconds before returning to the initial angle (0 -> default)
+float64[] initial_angle                  #neck angle to move to before/after looking (optional)
+float64 rate                             #how often to recompute the neck angles, in Hz (0 -> default)
+---

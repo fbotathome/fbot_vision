@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PeopleIntroducing.srv"
   "srv/LookAtDescription3D.srv"
   "srv/PeopleForgetting.srv"
+  "srv/LookAtPlace3D.srv"
   DEPENDENCIES std_msgs geometry_msgs sensor_msgs vision_msgs
 )
 

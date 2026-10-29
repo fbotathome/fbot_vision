@@ -22,13 +22,17 @@ setup(
     maintainer_email='dorneles1215@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'yolo_node = fbot_recognition.yolo_ros.yolo_node:main',
+            'tracking_node = fbot_recognition.yolo_ros.tracking_node:main',
+            'detect_3d_node = fbot_recognition.yolo_ros.detect_3d_node:main',
+            'debug_node = fbot_recognition.yolo_ros.debug_node:main',
             'yolov8_recognition = fbot_recognition.yolov8_recognition.yolov8_recognition:main',
             'yolo_tracker_recognition = fbot_recognition.yolo_tracker_recognition.yolo_tracker_recognition:main',
             'face_recognition = fbot_recognition.face_recognition.face_recognition:main',
             'moondream_recognition = fbot_recognition.moondream_recognition.moondream_recognition:main',
+            'gemini_recognition = fbot_recognition.gemini_recognition.gemini_recognition:main',
         ],
     },
 )

@@ -2,6 +2,7 @@ yolov8_recognition_femtobolt:
   ros__parameters:
     threshold: 0.6
     start_on_init: True
+    use_mask: True
 
     max_sizes:
       - [0.05, 0.05, 0.05]
