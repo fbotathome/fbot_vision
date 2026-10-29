@@ -22,7 +22,6 @@ setup(
     maintainer_email='dorneles1215@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'yolo_node = fbot_recognition.yolo_ros.yolo_node:main',
