@@ -401,7 +401,7 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.declare_parameter("debug_kpt_threshold", 0.5)
 
-        self.declare_parameter("model_file","yolo11n-pose")
+        self.declare_parameter("model_file","yolo26n-pose.pt")
         self.declare_parameter("tracking.reid.model_file","resnet_reid_model.pt")
         self.declare_parameter("tracking.reid.model_name","resnet50")
 

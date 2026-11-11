@@ -1,100 +1,70 @@
 #!/usr/bin/env python3
+"""Launches only the face_recognition node, locally or on the Jetson (use_remote).
+
+The camera is not launched here; use fbot_bringup/face_recognition.launch.py to bring up
+the camera together with the recognition.
+"""
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from ament_index_python.packages import get_package_share_directory
+from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_remote_ssh import NodeRemoteSSH, FindPackageShareRemote
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-import os
+from ament_index_python.packages import get_package_share_directory
+
 
 def generate_launch_description():
-
     config_file_path_remote = PathJoinSubstitution([
         FindPackageShareRemote(remote_install_space='/home/jetson/jetson_ws/install', package='fbot_recognition'),
         'config',
-        'face_recognition.yaml']
-    )
+        'face_recognition.yaml'
+    ])
 
     config_file_path = PathJoinSubstitution([
         get_package_share_directory('fbot_recognition'),
         'config',
-        'face_recognition.yaml']
-    )
+        'face_recognition.yaml'
+    ])
 
-    declared_arguments = []
-    declared_arguments.append(
+    declared_arguments = [
         DeclareLaunchArgument(
             'config_face',
             default_value=config_file_path,
             description='Path to the parameter file'
-        ))
-
-    declared_arguments.append(
+        ),
         DeclareLaunchArgument(
             'remote_config_face',
             default_value=config_file_path_remote,
-            description='Path to the remote parameter file'
-        ))
-    declared_arguments.append(
+            description='Path to the parameter file on the remote machine'
+        ),
         DeclareLaunchArgument(
             'use_remote',
             default_value='true',
-            description="If it should run the node on remote"
-        ))
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'use_realsense',
-            default_value='false',
-            description="If it should run the realsense node"
-        ))
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'use_femtobolt',
-            default_value='false',
-            description='If should launch the femtobolt'
-        )
-    )
-    
-    face_recognition_remote_node = NodeRemoteSSH(
+            description='If should run the recognition node on the remote Jetson machine'
+        ),
+    ]
+
+    remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='face_recognition',
         name='face_recognition',
-        parameters=[LaunchConfiguration('remote_config_face'),],
+        parameters=[LaunchConfiguration('remote_config_face')],
         user='jetson',
-        machine="jetson",
-        source_paths=[
-            "/home/jetson/jetson_ws/install/setup.bash"
-        ],
+        machine='jetson',
+        source_paths=['/home/jetson/jetson_ws/install/setup.bash'],
         condition=IfCondition(LaunchConfiguration('use_remote'))
     )
 
-    face_recognition_node = Node(
+    local_node = Node(
         package='fbot_recognition',
         executable='face_recognition',
         name='face_recognition',
-        parameters=[LaunchConfiguration('config_face'),],
+        parameters=[LaunchConfiguration('config_face')],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-    camera = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
-        ),
-        launch_arguments={
-            'use_realsense': LaunchConfiguration('use_realsense'),
-            'use_femtobolt': LaunchConfiguration('use_femtobolt'),
-            'use_remote': LaunchConfiguration('use_remote'),
-            'validate_config': 'false'
-        }.items()
-    )
-
-
     return LaunchDescription([
         *declared_arguments,
-        face_recognition_remote_node,
-        face_recognition_node,
-        camera
+        remote_node,
+        local_node,
     ])

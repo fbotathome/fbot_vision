@@ -1,99 +1,70 @@
 #!/usr/bin/env python3
-import os
-from launch_ros.actions import Node
+"""Launches only the yolo_tracker_recognition node, locally or on the Jetson (use_remote).
+
+The camera is not launched here; use fbot_bringup/yolo_tracker_recognition.launch.py to bring up
+the camera together with the recognition.
+"""
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_remote_ssh import NodeRemoteSSH, FindPackageShareRemote
 from ament_index_python.packages import get_package_share_directory
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+
 
 def generate_launch_description():
     config_file_path_remote = PathJoinSubstitution([
         FindPackageShareRemote(remote_install_space='/home/jetson/jetson_ws/install', package='fbot_recognition'),
         'config',
-        'yolo_tracker_recognition.yaml']
-    )
+        'yolo_tracker_recognition.yaml'
+    ])
 
     config_file_path = PathJoinSubstitution([
         get_package_share_directory('fbot_recognition'),
         'config',
-        'yolo_tracker_recognition.yaml']
-    )
+        'yolo_tracker_recognition.yaml'
+    ])
 
-    config_file_arg = DeclareLaunchArgument(
-        'config_tracker',
-        default_value=config_file_path,
-        description='Path to the parameter file'
-    )
+    declared_arguments = [
+        DeclareLaunchArgument(
+            'config_tracker',
+            default_value=config_file_path,
+            description='Path to the parameter file'
+        ),
+        DeclareLaunchArgument(
+            'remote_config_tracker',
+            default_value=config_file_path_remote,
+            description='Path to the parameter file on the remote machine'
+        ),
+        DeclareLaunchArgument(
+            'use_remote',
+            default_value='true',
+            description='If should run the recognition node on the remote Jetson machine'
+        ),
+    ]
 
-    config_file_remote_arg = DeclareLaunchArgument(
-        'remote_config_tracker',
-        default_value=config_file_path_remote,
-        description='Path to the parameter file'
-    )
-
-    config_remote_arg = DeclareLaunchArgument(
-        'use_remote',
-        default_value='true',
-        description="If should run the node on remote"
-    )
-
-    yolo_tracker_remote_node = NodeRemoteSSH(
+    remote_node = NodeRemoteSSH(
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
         name='yolo_tracker_recognition',
-        parameters=[LaunchConfiguration('remote_config_tracker'),],
+        parameters=[LaunchConfiguration('remote_config_tracker')],
         user='jetson',
-        machine="jetson",
-        source_paths=[
-            "/home/jetson/jetson_ws/install/setup.bash"
-        ],
+        machine='jetson',
+        source_paths=['/home/jetson/jetson_ws/install/setup.bash'],
         condition=IfCondition(LaunchConfiguration('use_remote'))
     )
 
-    yolo_tracker_node = Node(
+    local_node = Node(
         package='fbot_recognition',
         executable='yolo_tracker_recognition',
         name='yolo_tracker_recognition',
-        parameters=[LaunchConfiguration('config_tracker'),],
+        parameters=[LaunchConfiguration('config_tracker')],
         condition=UnlessCondition(LaunchConfiguration('use_remote'))
     )
 
-    declared_arguments = []
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'use_realsense',
-            default_value='false',
-            description="If it should run the realsense node"
-        ))
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            'use_femtobolt',
-            default_value='false',
-            description='If should launch the femtobolt'
-        )
-    )
-    
-    camera = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('fbot_bringup'), 'launch', 'camera.launch.py')
-        ),
-        launch_arguments={
-            'use_realsense': LaunchConfiguration('use_realsense'),
-            'use_femtobolt': LaunchConfiguration('use_femtobolt'),
-            'use_remote': LaunchConfiguration('use_remote'),
-            'validate_config': 'false'
-        }.items()
-    )
-
     return LaunchDescription([
-        config_file_arg,
-        config_file_remote_arg,
-        config_remote_arg,
         *declared_arguments,
-        yolo_tracker_remote_node,
-        yolo_tracker_node,
-        camera
+        remote_node,
+        local_node,
     ])
