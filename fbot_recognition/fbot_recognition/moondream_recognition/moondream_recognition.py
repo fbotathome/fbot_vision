@@ -20,6 +20,54 @@ from visualization_msgs.msg import Marker, MarkerArray
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 
+OBJECTS_PROMPTS = {
+    # Class: fabrics
+    "white_shirt":      "white t-shirt",
+    "grey_shirt":        "grey t-shirt",
+    "blue_shirt":         "blue t-shirt",
+    "black_shirt":       "black t-shirt",
+    "hand_towel":        "folded hand towel",
+
+    # Class: toys
+    "rubiks_cube":       "rubik's cube",
+
+    # Class: snacks
+    "pringles":          "pringles can",
+    "seaweed":            "seaweed snack pack",
+
+    # Class: fruits
+    "apple":               "apple",
+    "peach":               "peach",
+    "mangostane":       "mangosteen fruit",
+    "lemon":               "lemon",
+    "yellow_bellpepper": "yellow bell pepper",
+    "red_bellpepper":    "red bell pepper",
+
+    # Class: food
+    "instant_noodles": "instant noodles bag",
+    "cornflakes":        "cornflakes cup",
+
+    # Class: drinks
+    "coke":                 "coca-cola can",
+    "red_bull":           "red bull can",
+    "milk":                 "milk carton",
+    "soju":                 "soju bottle",
+    "pepsi":               "pepsi bottle",
+
+    # Class: cleaning_supplies
+    "dishwasher_tab":  "dishwasher tablet",
+    "sponge":              "yellow sponge",
+    "toothpaste":        "colgate toothpaste box",
+
+    # Class: dishes
+    "cup":                   "red mug",
+    "spoon":               "spoon",
+    "plate":                "red plate",
+    "knife":                "knife",
+    "fork":                  "fork",
+    "bowl":                 "red bowl",
+}
+
 from ament_index_python.packages import get_package_share_directory
 class MoondreamRecognition(BaseRecognition):
     def __init__(self) -> None:
@@ -56,7 +104,10 @@ class MoondreamRecognition(BaseRecognition):
         self.model = None
 
     def updateObjectPrompt(self, msg: String):
-        self.current_class = msg.data
+        self.current_class = msg.data.strip()
+        if self.current_class in OBJECTS_PROMPTS:
+            self.current_class = OBJECTS_PROMPTS[self.current_class]
+            self.get_logger().info(f"Object prompt updated to: {self.current_class}")
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 

@@ -1,6 +1,7 @@
 yolo_tracker_recognition:
   ros__parameters:
-    model_file: yolo11n-pose.pt
+    model_file: yolo26n-pose.pt
+    use_tensorrt: auto  # auto: <model>.engine if it runs here, else the .pt (export_engines builds it)
     debug_kpt_threshold: 0.5
 
     max_sizes:

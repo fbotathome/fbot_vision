@@ -1,0 +1,30 @@
+gemini_recognition:
+  ros__parameters:
+    max_sizes:
+      - [0.05, 0.05, 0.05]
+
+    model:
+      # OpenRouter model slug. Any vision-capable model works, e.g.
+      # google/gemini-2.5-flash, google/gemini-2.0-flash-001, etc.
+      name: google/gemini-2.5-flash
+      base_url: https://openrouter.ai/api/v1
+      # Leave empty to read from the OPENROUTER_API_KEY env var.
+      api_key: ""
+
+    subscribers:
+      slop: 0.2
+      qos_profile: 10
+
+      image_rgb: /femtobolt/color/image_raw
+      camera_info: /femtobolt/color/camera_info
+      image_depth: /femtobolt/depth/image_raw
+      object_prompt: fbot_vision/fr/object_prompt
+
+    publishers:
+      object_recognition:
+        topic: /fbot_vision/fr/gemini_recognition
+        qos_profile: 10
+
+      debug:
+        topic: /fbot_vision/fr/gemini_debug
+        qos_profile: 10
