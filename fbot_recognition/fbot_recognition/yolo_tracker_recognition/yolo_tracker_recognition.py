@@ -12,6 +12,7 @@ from ultralytics import YOLO
 from ReIDManager import ReIDManager
 from image2world import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
 from fbot_recognition import BaseRecognition
+from fbot_recognition.yolo_model_loader import declare_use_tensorrt, read_use_tensorrt, load_yolo_model
 import numpy as np
 
 from fbot_vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray, KeyPoint2D, KeyPoint3D
@@ -53,7 +54,7 @@ class YoloTrackerRecognition(BaseRecognition):
     
     def loadModel(self):
         self.get_logger().info(f"Loading model: {self.model_file}")
-        self.model = YOLO(self.model_file)
+        self.model, _ = load_yolo_model(self.model_file, self.use_tensorrt, self.get_logger())
         if self.tracking:
             self.loadTrackerModel()
 
@@ -402,6 +403,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.declare_parameter("debug_kpt_threshold", 0.5)
 
         self.declare_parameter("model_file","yolo26n-pose.pt")
+        declare_use_tensorrt(self)
         self.declare_parameter("tracking.reid.model_file","resnet_reid_model.pt")
         self.declare_parameter("tracking.reid.model_name","resnet50")
 
@@ -451,6 +453,7 @@ class YoloTrackerRecognition(BaseRecognition):
         share_directory = get_package_share_directory("fbot_recognition")
 
         self.model_file = share_directory + "/weights/" + self.get_parameter("model_file").value
+        self.use_tensorrt = read_use_tensorrt(self)
         self.reid_model_file = share_directory + "/weights/" + self.get_parameter("tracking.reid.model_file").value
         self.reid_model_name = self.get_parameter("tracking.reid.model_name").value
 

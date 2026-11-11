@@ -8,6 +8,7 @@ yolov8_recognition:
       - [0.05, 0.05, 0.05]
 
     model_file: yolo26n-seg.pt
+    use_tensorrt: auto  # auto: <model>.engine if it runs here, else the .pt (export_engines builds it)
 
     services:
       object_recognition:

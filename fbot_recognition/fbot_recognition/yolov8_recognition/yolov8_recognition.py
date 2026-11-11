@@ -17,6 +17,7 @@ from sensor_msgs.msg import Image, CameraInfo
 from visualization_msgs.msg import Marker, MarkerArray
 from vision_msgs.msg import BoundingBox2D, BoundingBox3D
 from fbot_recognition import BaseRecognition
+from fbot_recognition.yolo_model_loader import declare_use_tensorrt, read_use_tensorrt, load_yolo_model
 from fbot_vision_msgs.msg import Detection3D, Detection3DArray
 
 from ament_index_python.packages import get_package_share_directory
@@ -46,7 +47,7 @@ class YoloV8Recognition(BaseRecognition):
 
     def loadModel(self) -> None: 
         self.get_logger().info("=> Loading model")
-        self.model = YOLO(self.modelFile)
+        self.model, _ = load_yolo_model(self.modelFile, self.useTensorrt, self.get_logger())
         self.model.conf = self.threshold
         self.get_logger().info("=> Loaded")
 
@@ -230,6 +231,7 @@ class YoloV8Recognition(BaseRecognition):
         self.declare_parameter("model_file", "robocup2025.pt")
         self.declare_parameter("max_sizes", [0.05, 0.05, 0.05])
         self.declare_parameter("use_mask", True)
+        declare_use_tensorrt(self)
         self.declare_parameter("start_on_init", True)
         self.declare_parameter("services.object_recognition.start", "/fbot_vision/fr/object_start")
         self.declare_parameter("services.object_recognition.stop", "/fbot_vision/fr/object_stop")
@@ -246,6 +248,7 @@ class YoloV8Recognition(BaseRecognition):
         self.modelFile = get_package_share_directory('fbot_recognition') + "/weights/" + self.get_parameter("model_file").value
         self.maxSizes = self.get_parameter("max_sizes").value
         self.useMask = self.get_parameter("use_mask").value
+        self.useTensorrt = read_use_tensorrt(self)
         self.startRecognitionTopic = self.get_parameter("services.object_recognition.start").value
         self.stopRecognitionTopic = self.get_parameter("services.object_recognition.stop").value
         super().readParameters()
