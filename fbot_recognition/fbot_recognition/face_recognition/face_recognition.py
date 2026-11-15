@@ -174,7 +174,7 @@ class FaceRecognition(BaseRecognition):
                 self.get_logger().error(f"{e}. Skipping detection")
                 continue
 
-            if np.linalg.norm([bbox3d.center.position.x, bbox3d.center.position.y, bbox3d.center.position.z]) < 0.05:
+            if np.linalg.norm([bbox3d.center.position.x, bbox3d.center.position.y, bbox3d.center.position.z]) < 0.01:
                 self.get_logger().warn(f"Face detection too close to the camera, skipping detection.")
                 continue
 
@@ -315,7 +315,7 @@ class FaceRecognition(BaseRecognition):
         try:
             bb3d = boundingBoxProcessing(data)
         except Exception as e:
-            raise Exception("An error occurred while processing the bounding box.")
+            raise Exception(f"An error occurred while processing the bounding box: {e}")
         
         return data.boundingBox2D, bb3d
     

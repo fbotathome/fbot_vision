@@ -420,7 +420,7 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.declare_parameter("tracking.config_file","yolo_tracker_default_config.yaml")
 
-        self.declare_parameter("max_sizes", [2.5, 2.5, 2.5])
+        self.declare_parameter("max_sizes", [2.5, 2.5, 0.5])
 
         # self.declare_parameter("tracking.model_name",128)
 
