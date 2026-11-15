@@ -1,4 +1,8 @@
-image2world
+# image2world: install MANUALLY from the feat/add_seg branch (mask support, not on PyPI):
+#   https://github.com/Jfsslemos/Image2WorldLib/tree/feat/add_seg (commit b89ee99)
+#   copy __init__.py image2worldlib.py interface.py validate.py over the installed
+#   image2world package (pip install image2world first, then overwrite its files).
+#image2world
 open3d
 ultralytics
 reidmanager

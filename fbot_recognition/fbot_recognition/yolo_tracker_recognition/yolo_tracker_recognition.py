@@ -12,6 +12,7 @@ from ultralytics import YOLO
 from ReIDManager import ReIDManager
 from image2world import BoundingBoxProcessingData, boundingBoxProcessing, poseProcessing
 from fbot_recognition import BaseRecognition
+from fbot_recognition.yolo_model_loader import declare_use_tensorrt, read_use_tensorrt, load_yolo_model
 import numpy as np
 
 from fbot_vision_msgs.msg import Detection2D, Detection2DArray, Detection3D, Detection3DArray, KeyPoint2D, KeyPoint3D
@@ -53,7 +54,7 @@ class YoloTrackerRecognition(BaseRecognition):
     
     def loadModel(self):
         self.get_logger().info(f"Loading model: {self.model_file}")
-        self.model = YOLO(self.model_file)
+        self.model, _ = load_yolo_model(self.model_file, self.use_tensorrt, self.get_logger())
         if self.tracking:
             self.loadTrackerModel()
 
@@ -213,18 +214,15 @@ class YoloTrackerRecognition(BaseRecognition):
             
         
         if results[0].keypoints != None:
+            # One pose per box, in the same order as bboxs; desc.id is the box index.
+            # (Filtering poses and detections separately, with > vs >=, desynced them
+            # whenever a score was exactly det_threshold -> IndexError that killed the node.)
             poses = results[0].keypoints.data.cpu().numpy()
-            scores = results[0].boxes.conf.cpu().numpy()
-            poses_idx = scores > self.det_threshold
-            poses = poses[poses_idx]
-            counter = 0
-            # if not tracking or len(people_ids) == len(poses):
             desc : Detection2D
             for desc in recognition.detections:
-                if desc.label == "person" and desc.score >= self.det_threshold:
+                if desc.label == "person" and desc.score >= self.det_threshold and desc.id < len(poses):
                     desc.type = Detection2D.POSE
-                    # rospy.logwarn(desc.score)
-                    for idx, kpt in enumerate(poses[counter]):
+                    for idx, kpt in enumerate(poses[desc.id]):
                         keypoint = KeyPoint2D()
                         keypoint.x = float(kpt[0])
                         keypoint.y = float(kpt[1])
@@ -233,15 +231,12 @@ class YoloTrackerRecognition(BaseRecognition):
                         desc.pose.append(keypoint)
                         if kpt[2] >= self.threshold:
                             cv.circle(debug_img, (int(kpt[0]), int(kpt[1])),3,(0,255,0),thickness=-1)
-                        if tracking:
-                            desc.global_id = people_ids[counter]
                     if tracked_box != None and tracked_description.global_id == desc.global_id:
                         desc.header = HEADER
                         tracked_description = desc
                         for kpt in desc.pose:
                             if kpt.score >= self.threshold:
                                 cv.circle(debug_img, (int(kpt.x), int(kpt.y)),3,(0,255,255),thickness=-1)
-                    counter +=1
         
         description : Detection2D
         track_recognition3D = Detection3DArray()
@@ -401,7 +396,8 @@ class YoloTrackerRecognition(BaseRecognition):
 
         self.declare_parameter("debug_kpt_threshold", 0.5)
 
-        self.declare_parameter("model_file","yolo11n-pose")
+        self.declare_parameter("model_file","yolo26n-pose.pt")
+        declare_use_tensorrt(self)
         self.declare_parameter("tracking.reid.model_file","resnet_reid_model.pt")
         self.declare_parameter("tracking.reid.model_name","resnet50")
 
@@ -451,6 +447,7 @@ class YoloTrackerRecognition(BaseRecognition):
         share_directory = get_package_share_directory("fbot_recognition")
 
         self.model_file = share_directory + "/weights/" + self.get_parameter("model_file").value
+        self.use_tensorrt = read_use_tensorrt(self)
         self.reid_model_file = share_directory + "/weights/" + self.get_parameter("tracking.reid.model_file").value
         self.reid_model_name = self.get_parameter("tracking.reid.model_name").value
 

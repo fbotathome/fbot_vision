@@ -3,4 +3,5 @@
 *.csv
 *.dat
 *.pt
+*.engine
 .env

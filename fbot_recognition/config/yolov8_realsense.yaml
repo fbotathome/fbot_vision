@@ -2,11 +2,13 @@ yolov8_recognition_realsense:
   ros__parameters:
     threshold: 0.6
     start_on_init: True
+    use_mask: True
 
     max_sizes:
       - [0.05, 0.05, 0.05]
 
-    model_file: yolov8n.pt
+    model_file: yolo26n-seg.pt
+    use_tensorrt: auto  # auto: <model>.engine if it runs here, else the .pt (export_engines builds it)
 
     services:
       object_recognition:
