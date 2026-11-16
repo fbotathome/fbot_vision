@@ -37,7 +37,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.loadModel()
         self.initRosComm()
         if self.tracking_on_init:
-            self.startTracking()
+            self.startTracking(Empty.Request(), Empty.Response())
         self.get_logger().info(f"Node started!!!")
         # self.loadModel()
 
@@ -93,6 +93,7 @@ class YoloTrackerRecognition(BaseRecognition):
         self.tracking = False
         self.unLoadTrackerModel()
         self.get_logger().info("Tracking stoped!!!")
+        return resp
 
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo):
         tracking = self.tracking
