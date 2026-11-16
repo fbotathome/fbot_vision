@@ -6,10 +6,33 @@ gemini_recognition:
     model:
       # OpenRouter model slug. Any vision-capable model works, e.g.
       # google/gemini-2.5-flash, google/gemini-2.0-flash-001, etc.
-      name: google/gemini-2.5-flash
+      name: google/gemini-3.1-flash-lite
       base_url: https://openrouter.ai/api/v1
       # Leave empty to read from the OPENROUTER_API_KEY env var.
       api_key: ""
+      # Seconds to wait for one request (no retries). On failure the frame goes to the fallback.
+      timeout: 10.0
+      # Caps the answer; a response cut by this limit is discarded.
+      max_tokens: 2048
+      # Sends reasoning.enabled=false to OpenRouter (Gemini 2.5 "thinking" makes requests slow).
+      # Set to false if OpenRouter rejects the request.
+      disable_reasoning: true
+      # Longer image side sent to the model, in pixels (0 = full resolution).
+      max_image_size: 1024
+      # Minimum seconds between two requests.
+      min_interval: 1.0
+      # After a failed request (e.g. no internet), skip OpenRouter for this long and use the fallback.
+      primary_retry_interval: 30.0
+
+    # Local model on the Jetson Ollama (OpenAI-compatible API), used when OpenRouter fails.
+    # Lower quality: gemma4 found the large objects but missed people/small objects in tests,
+    # and takes ~11 s per frame. model: none disables it.
+    fallback:
+      model: gemma4:latest
+      host: http://jetson:11434
+      timeout: 30.0
+      # Pin the model in Ollama memory so the first fallback request does not wait for the load.
+      keep_loaded: true
 
     subscribers:
       slop: 0.2

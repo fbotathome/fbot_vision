@@ -6,10 +6,14 @@ import time
 import json
 import base64
 import numpy as np
+import re
 import cv2
+import threading
+import requests
 import rclpy
 
 from openai import OpenAI
+from rclpy.executors import ExternalShutdownException
 from PIL import Image as IMG
 from image2world.image2worldlib import *
 from fbot_recognition import BaseRecognition
@@ -69,6 +73,9 @@ OBJECTS_PROMPTS = {
     "bowl":                 "red bowl",
 }
 
+# Local models often wrap the JSON in a markdown code fence even with response_format=json.
+CODE_FENCE = re.compile(r'^\s*```[a-zA-Z]*\s*\n?(.*?)\n?\s*```\s*$', re.DOTALL)
+
 from ament_index_python.packages import get_package_share_directory
 class GeminiRecognition(BaseRecognition):
     def __init__(self) -> None:
@@ -79,8 +86,19 @@ class GeminiRecognition(BaseRecognition):
         self.phraseToKey: dict = {}
         self.declareParameters()
         self.readParameters()
+        self.primaryDownUntil = 0.0
         self.loadModel()
+
+        # The OpenRouter request takes seconds; it runs in a worker thread so the
+        # executor keeps serving the camera and prompt subscriptions meanwhile.
+        self.frameLock = threading.Lock()
+        self.latestFrame = None
+        self.frameReady = threading.Event()
+        self.stopWorker = threading.Event()
+        self.worker = threading.Thread(target=self.detectionLoop, daemon=True)
+
         self.initRosComm()
+        self.worker.start()
 
     def initRosComm(self) -> None:
         self.debugPublisher = self.create_publisher(Image, self.debugImageTopic, qos_profile=self.debugQosProfile)
@@ -97,8 +115,34 @@ class GeminiRecognition(BaseRecognition):
                 "No OpenRouter API key found. Set the 'model.api_key' parameter "
                 "or the OPENROUTER_API_KEY environment variable.")
             raise RuntimeError("Missing OpenRouter API key")
-        self.client = OpenAI(base_url=self.baseUrl, api_key=apiKey)
-        self.get_logger().info(f"=> Ready (model: {self.modelName} via {self.baseUrl})")
+        # Without a timeout the client waits up to 600 s and retries twice.
+        self.client = OpenAI(base_url=self.baseUrl, api_key=apiKey,
+                             timeout=self.requestTimeout, max_retries=0)
+        self.get_logger().info(
+            f"=> Ready (model: {self.modelName} via {self.baseUrl}, timeout {self.requestTimeout} s, "
+            f"max_tokens {self.maxTokens}, max_image_size {self.maxImageSize})")
+
+        self.fallbackClient = None
+        if self.fallbackModel:
+            # Ollama's OpenAI-compatible API (on the Jetson) answers when OpenRouter is unreachable.
+            self.fallbackClient = OpenAI(base_url=f"{self.fallbackHost.rstrip('/')}/v1", api_key="ollama",
+                                         timeout=self.fallbackTimeout, max_retries=0)
+            self.get_logger().info(f"=> Fallback: {self.fallbackModel} via {self.fallbackHost} (timeout {self.fallbackTimeout} s)")
+            if self.fallbackKeepLoaded:
+                threading.Thread(target=self.preloadFallback, daemon=True).start()
+        else:
+            self.get_logger().info("=> Fallback: disabled")
+
+    def preloadFallback(self) -> None:
+        """Loads the fallback model in Ollama and pins it in memory (keep_alive=-1), so the
+        first fallback request does not also pay the model load."""
+        try:
+            response = requests.post(f"{self.fallbackHost.rstrip('/')}/api/generate",
+                                     json={"model": self.fallbackModel, "keep_alive": -1}, timeout=120)
+            response.raise_for_status()
+            self.get_logger().info(f"Fallback model {self.fallbackModel} loaded on {self.fallbackHost}")
+        except Exception as e:
+            self.get_logger().warn(f"Could not preload fallback model {self.fallbackModel}: {e}")
 
     def unLoadModel(self) -> None:
         self.client = None
@@ -137,35 +181,42 @@ class GeminiRecognition(BaseRecognition):
             "{\"detections\": []}. Return only the JSON, with no extra text."
         )
 
-        dataUrl = self.encodeImage(pilImage)
+        dataUrl = self.encodeImage(pilImage, self.maxImageSize)
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": dataUrl}},
+            ],
+        }]
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.modelName,
-                temperature=0.0,
-                response_format={"type": "json_object"},
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": dataUrl}},
-                    ],
-                }],
-            )
-        except Exception as e:
-            self.get_logger().error(f"OpenRouter API request failed: {e}")
-            return []
-
-        content = response.choices[0].message.content if response.choices else None
-        if not content:
-            self.get_logger().error("Empty response from OpenRouter")
+        content = None
+        primaryFailed = False
+        if time.time() >= self.primaryDownUntil:
+            extraBody = {"reasoning": {"enabled": False}} if self.disableReasoning else None
+            content, primaryFailed = self.requestDetections(self.client, self.modelName, "OpenRouter", messages, extraBody)
+            if primaryFailed:
+                # Skip the primary for a while: otherwise every frame waits for another timeout.
+                self.primaryDownUntil = time.time() + self.primaryRetryInterval
+                if self.fallbackClient is not None:
+                    self.get_logger().error(
+                        f"Primary model failed; using fallback {self.fallbackModel} "
+                        f"for the next {self.primaryRetryInterval:.0f} s")
+        if content is None and self.fallbackClient is not None and (primaryFailed or time.time() < self.primaryDownUntil):
+            # Disable "thinking" on reasoning-capable local models (gemma4): much faster.
+            content, _ = self.requestDetections(self.fallbackClient, self.fallbackModel, "fallback",
+                                                messages, {"reasoning_effort": "none"})
+        if content is None:
             return []
 
         boxes = []
+        match = CODE_FENCE.match(content)
+        if match:
+            content = match.group(1)
         try:
             data = json.loads(content)
         except (json.JSONDecodeError, TypeError) as e:
-            self.get_logger().error(f"Failed to parse OpenRouter response: {e}")
+            self.get_logger().error(f"Failed to parse model response: {e}")
             return []
 
         # Accept either {"detections": [...]} or a bare list.
@@ -190,9 +241,46 @@ class GeminiRecognition(BaseRecognition):
             })
         return boxes
 
+    def requestDetections(self, client: OpenAI, model: str, name: str, messages: list, extraBody) -> tuple:
+        """Sends one detection request. Returns (content or None, request_failed): request_failed
+        is True when the endpoint did not answer (network, timeout, HTTP error), which is
+        what triggers the fallback; an answer that is empty or cut by max_tokens is not."""
+        start = time.time()
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0.0,
+                # Without a cap the model once looped for 4 min and returned 191 KB of JSON.
+                max_tokens=self.maxTokens,
+                extra_body=extraBody,
+                response_format={"type": "json_object"},
+                messages=messages,
+            )
+        except Exception as e:
+            self.get_logger().error(f"{name} request ({model}) failed after {time.time() - start:.1f} s: {e}")
+            return None, True
+
+        elapsed = time.time() - start
+        choice = response.choices[0] if response.choices else None
+        content = choice.message.content if choice else None
+        if not content:
+            self.get_logger().error(f"Empty response from {name} ({model}, {elapsed:.1f} s)")
+            return None, False
+        if choice.finish_reason == 'length':
+            self.get_logger().error(f"{name} response ({model}) hit max_tokens ({self.maxTokens}) after {elapsed:.1f} s, discarding")
+            return None, False
+        log = self.get_logger().debug if client is self.client else self.get_logger().warn
+        log(f"{name} ({model}) answered in {elapsed:.1f} s")
+        return content, False
+
     @staticmethod
-    def encodeImage(pilImage: IMG.Image) -> str:
-        """Encode a PIL image as a base64 JPEG data URL."""
+    def encodeImage(pilImage: IMG.Image, maxSize: int = 0) -> str:
+        """Encode a PIL image as a base64 JPEG data URL, downscaled so its longer
+        side is at most maxSize (0 keeps the original size). The model answers in
+        coordinates normalized to the image, so scaling does not change the boxes."""
+        if maxSize > 0 and max(pilImage.size) > maxSize:
+            pilImage = pilImage.copy()
+            pilImage.thumbnail((maxSize, maxSize))
         bgr = np.array(pilImage)[..., ::-1]
         ok, buffer = cv2.imencode('.jpg', bgr)
         if not ok:
@@ -212,9 +300,41 @@ class GeminiRecognition(BaseRecognition):
             self.get_logger().error("One or more input messages are invalid.")
             return
 
+        # Only keep the newest synchronized frame; detectionLoop consumes it.
+        with self.frameLock:
+            self.latestFrame = (depthMsg, imageMsg, cameraInfoMsg)
+        self.frameReady.set()
+
+    def detectionLoop(self) -> None:
+        """Worker thread: one OpenRouter request at a time, on the newest frame,
+        at most once every min_interval seconds."""
+        lastRequest = 0.0
+        while not self.stopWorker.is_set():
+            if not self.frameReady.wait(timeout=0.5):
+                continue
+            wait = self.minInterval - (time.time() - lastRequest)
+            if wait > 0 and self.stopWorker.wait(timeout=wait):
+                break
+            with self.frameLock:
+                frame = self.latestFrame
+                self.latestFrame = None
+                self.frameReady.clear()
+            if frame is None or not self.targetPhrases:
+                continue
+            lastRequest = time.time()
+            try:
+                self.processFrame(*frame)
+            except Exception as e:
+                self.get_logger().error(f"Gemini detection failed: {e}")
+
+    def processFrame(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
+        targetPhrases = list(self.targetPhrases)
+        if not targetPhrases:
+            return
+
         cvImage = self.cvBridge.imgmsg_to_cv2(imageMsg, desired_encoding='bgr8')
         pilImage = IMG.fromarray(cvImage[..., ::-1])
-        results = self.detect(pilImage, self.targetPhrases)
+        results = self.detect(pilImage, targetPhrases)
 
         detectionHeader = imageMsg.header
 
@@ -383,6 +503,16 @@ class GeminiRecognition(BaseRecognition):
         self.declare_parameter("model.name", "google/gemini-2.5-flash")
         self.declare_parameter("model.api_key", "")
         self.declare_parameter("model.base_url", "https://openrouter.ai/api/v1")
+        self.declare_parameter("model.timeout", 10.0)
+        self.declare_parameter("model.max_tokens", 2048)
+        self.declare_parameter("model.disable_reasoning", True)
+        self.declare_parameter("model.max_image_size", 1024)
+        self.declare_parameter("model.min_interval", 1.0)
+        self.declare_parameter("model.primary_retry_interval", 30.0)
+        self.declare_parameter("fallback.model", "gemma4:latest")
+        self.declare_parameter("fallback.host", "http://jetson:11434")
+        self.declare_parameter("fallback.timeout", 30.0)
+        self.declare_parameter("fallback.keep_loaded", True)
         super().declareParameters()
 
     def readParameters(self) -> None:
@@ -395,14 +525,33 @@ class GeminiRecognition(BaseRecognition):
         self.modelName = self.get_parameter("model.name").value
         self.apiKey = self.get_parameter("model.api_key").value
         self.baseUrl = self.get_parameter("model.base_url").value
+        self.requestTimeout = float(self.get_parameter("model.timeout").value)
+        self.maxTokens = int(self.get_parameter("model.max_tokens").value)
+        self.disableReasoning = bool(self.get_parameter("model.disable_reasoning").value)
+        self.maxImageSize = int(self.get_parameter("model.max_image_size").value)
+        self.minInterval = float(self.get_parameter("model.min_interval").value)
+        self.primaryRetryInterval = float(self.get_parameter("model.primary_retry_interval").value)
+        self.fallbackModel = str(self.get_parameter("fallback.model").value).strip()
+        if self.fallbackModel.lower() in ("", "none"):
+            self.fallbackModel = ""
+        self.fallbackHost = self.get_parameter("fallback.host").value
+        self.fallbackTimeout = float(self.get_parameter("fallback.timeout").value)
+        self.fallbackKeepLoaded = bool(self.get_parameter("fallback.keep_loaded").value)
         super().readParameters()
 
 def main(args=None):
     rclpy.init(args=args)
     node = GeminiRecognition()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        node.stopWorker.set()
+        node.worker.join(timeout=2.0)
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
