@@ -203,8 +203,9 @@ class GeminiRecognition(BaseRecognition):
     def callback(self, depthMsg: Image, imageMsg: Image, cameraInfoMsg: CameraInfo) -> None:
 
         if not self.targetPhrases:
-            if time.time() % 5 < 0.1:
-                self.get_logger().warn("Waiting for object prompt to be set ...")
+            # if time.time() % 5 < 0.1:
+            #     self.get_logger().warn("Waiting for object prompt to be set ...")
+                
             return
 
         if imageMsg is None or depthMsg is None or cameraInfoMsg is None:
@@ -255,7 +256,7 @@ class GeminiRecognition(BaseRecognition):
                 try:
                     bb3d = boundingBoxProcessing(data)
                 except Exception as e:
-                    self.get_logger().error(f"Error processing bounding box: {e}")
+                    # self.get_logger().error(f"Error processing bounding box: {e}")
                     continue
 
                 detection3d = self.createDetection3d(bb2d, bb3d, score, detectionHeader, box['label'])

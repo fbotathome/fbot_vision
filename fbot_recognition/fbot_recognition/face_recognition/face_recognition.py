@@ -256,7 +256,7 @@ class FaceRecognition(BaseRecognition):
         """
         detections=[]
         try:
-            results = self.yolo_model.track(cv_image, classes=0, conf=self.threshold, imgsz=480)
+            results = self.yolo_model.track(cv_image, classes=0, conf=self.threshold, imgsz=480, verbose=False)
             boxes = results[0].boxes
             
             for idx, box in enumerate(boxes):
