@@ -178,13 +178,9 @@ class FaceRecognition(BaseRecognition):
                 self.get_logger().warn(f"Face detection too close to the camera, skipping detection.")
                 continue
 
-            if nearest_neighbours[idx]:
-                name = nearest_neighbours[idx]['name']
-                uuid = nearest_neighbours[idx]['uuid']
-            else:
-                name = f'unknown'
-                uuid = f'{unknown_idx}'
-                unknown_idx += 1
+            # searchKNN fills unknown faces itself (name 'unknown', uuid from self.unknown_idx)
+            name = nearest_neighbours[idx]['name']
+            uuid = nearest_neighbours[idx]['uuid']
    
             color = (255, 0, 255)
             thickness = 6
@@ -300,14 +296,18 @@ class FaceRecognition(BaseRecognition):
         @return Tuple containing BoundingBox2D and BoundingBox3D objects
         """
 
-        size = int(right-left), int(bottom-top)
+        width, height = int(right - left), int(bottom - top)
 
         data = BoundingBoxProcessingData()
+        # callback argument names are swapped by the message_filters order (camera_info, image_rgb,
+        # image_depth): cameraInfoMsg holds the depth image and depthMsg the CameraInfo, so this
+        # call does pass (depth, camera_info) as image2world expects.
         data.sensor.setSensorData(cameraInfoMsg, depthMsg)
-        data.boundingBox2D.center.position.x = float(int(left) + int(size[1]/2))
-        data.boundingBox2D.center.position.y = float(int(top) + int(size[0]/2))
-        data.boundingBox2D.size_x = float(bottom-top)
-        data.boundingBox2D.size_y = float(right-left)
+        # x/size_x are image columns (width), y/size_y rows (height)
+        data.boundingBox2D.center.position.x = float(int(left) + width // 2)
+        data.boundingBox2D.center.position.y = float(int(top) + height // 2)
+        data.boundingBox2D.size_x = float(width)
+        data.boundingBox2D.size_y = float(height)
         data.maxSize.x = float(3)
         data.maxSize.y = float(3)
         data.maxSize.z = float(3)
@@ -417,12 +417,12 @@ class FaceRecognition(BaseRecognition):
 
         return num_deleted
 
-    def storeFaceEmbeddings(self, name: str, embeddings: list, ttl=60*10*6):
+    def storeFaceEmbeddings(self, name: str, embeddings: list):
         """!
         @brief Store face embeddings in Redis database for a person with generated UUID and expiration time
         @param name Name of the person to store embeddings for
         @param embeddings List of face embedding vectors to store
-        @param ttl Time-to-live in seconds for stored embeddings (default: 1 hour)
+        Embeddings expire after the face_ttl parameter (seconds); face_ttl <= 0 keeps them.
         @return Generated UUID for the stored embeddings
         """
         uuid = str(uuid4())
@@ -442,7 +442,8 @@ class FaceRecognition(BaseRecognition):
             }
             redis_key = f"faces:{name}:{uuid}:{idx}"
             num_fields = self.redis_client.hset(redis_key, mapping=face_data)
-            self.redis_client.expire(redis_key, ttl)
+            if self.face_ttl > 0:
+                self.redis_client.expire(redis_key, self.face_ttl)
         
         return uuid
     
@@ -539,6 +540,7 @@ class FaceRecognition(BaseRecognition):
         self.declare_parameter("knn_threshold", 0.5)
         self.declare_parameter("redis_host", "localhost")
         self.declare_parameter("redis_port", 6379)
+        self.declare_parameter("face_ttl", 3600)
         self.declare_parameter("servers.forget_person.servername", "/fbot_vision/fr/forget_person")
         super().declareParameters()
 
@@ -556,6 +558,7 @@ class FaceRecognition(BaseRecognition):
         self.knn_threshhold = self.get_parameter("knn_threshold").value
         self.redis_host = self.get_parameter("redis_host").value
         self.redis_port = self.get_parameter("redis_port").value
+        self.face_ttl = self.get_parameter("face_ttl").value
 
         self.deepface_model_name = 'Facenet512'
         self.embedding_dim = 512

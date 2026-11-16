@@ -249,6 +249,10 @@ class YoloTrackerRecognition(BaseRecognition):
             data.boundingBox2D.size_x = description.bbox.size_x
             data.boundingBox2D.size_y = description.bbox.size_y
             data.maxSize.x, data.maxSize.y, data.maxSize.z = self.max_sizes
+            # Depth from a body region (torso keypoints, else the inner part of the box) instead of
+            # the single centre pixel, which often has no depth (gap between arms, image border,
+            # too close) or hits the background.
+            data.sensor.mask = self.bodyMask(description, data.sensor.imageDepth.shape)
             try:
                 bbox3D = boundingBoxProcessing(data)
             except Exception as e:
@@ -279,6 +283,32 @@ class YoloTrackerRecognition(BaseRecognition):
         if tracked_box != None and len(track_recognition.detections) > 0:
             self.trackingPub.publish(track_recognition)
             self.tracking3DPub.publish(track_recognition3D)
+
+    def bodyMask(self, description: Detection2D, shape) -> np.ndarray:
+        """
+        @brief Mask (uint8, image size) of the region whose depth represents the detection:
+               the torso polygon from the keypoints (shoulders + hips) when at least 3 are
+               confident, otherwise the central part of the bounding box.
+        """
+        height, width = shape[:2]
+        mask = np.zeros((height, width), np.uint8)
+        torso = [kp for kp in description.pose if kp.id in (5, 6, 12, 11) and kp.score >= self.threshold]
+        if len(torso) >= 3:
+            order = {5: 0, 6: 1, 12: 2, 11: 3}
+            torso.sort(key=lambda kp: order[kp.id])
+            polygon = np.array([[int(np.clip(kp.x, 0, width - 1)), int(np.clip(kp.y, 0, height - 1))] for kp in torso], np.int32)
+            cv.fillPoly(mask, [polygon], 255)
+            if np.count_nonzero(mask) >= 50:
+                return mask
+            mask[:] = 0
+        cx, cy = description.bbox.center.position.x, description.bbox.center.position.y
+        w, h = description.bbox.size_x, description.bbox.size_y
+        x0 = int(np.clip(cx - 0.2 * w, 0, width - 1))
+        x1 = int(np.clip(cx + 0.2 * w, 0, width - 1))
+        y0 = int(np.clip(cy - 0.35 * h, 0, height - 1))   # upper body: 15%..60% of the box height
+        y1 = int(np.clip(cy + 0.1 * h, 0, height - 1))
+        mask[y0:y1 + 1, x0:x1 + 1] = 255
+        return mask
 
     def createDetection3d(self, bb3d: BoundingBox3D , score: float, detectionHeader: Header, label: str, id : int = 0 , global_id : int=0, pose : list = []) -> Detection3D:
         detection3d = Detection3D()
